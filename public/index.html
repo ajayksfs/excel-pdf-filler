@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Excel PDF Builder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 16px;
+            color: #243047;
+        }
+
+        section {
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+        }
+
+        button,
+        select,
+        input {
+            padding: 9px;
+            margin: 5px;
+        }
+
+        button {
+            cursor: pointer;
+            background: #193b70;
+            color: white;
+            border: 0;
+            border-radius: 5px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            padding: 9px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #eaf0f9;
+        }
+
+        .mapping {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 8px;
+            max-width: 500px;
+        }
+
+        #status {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Excel PDF Builder</h1>
+
+    <section>
+        <h2>1. Upload Excel</h2>
+        <input type="file" id="file" accept=".xlsx,.xls,.csv">
+        <button onclick="uploadFile()">Upload</button>
+        <p id="status"></p>
+    </section>
+
+    <section>
+        <h2>2. Select worksheet</h2>
+        <select id="sheets"></select>
+        <button onclick="loadSheet()">Load worksheet</button>
+        <div id="preview"></div>
+    </section>
+
+    <section>
+        <h2>3. Map Excel columns</h2>
+        <div id="mapping" class="mapping"></div>
+        <button onclick="saveMapping()">Save mapping</button>
+        <button onclick="previewMapped()">Preview mapped data</button>
+        <div id="mappedPreview"></div>
+    </section>
+
+    <script>
+        let session = null;
+
+        async function api(url, options = {}) {
+            const response = await fetch(url, options);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Request failed");
+            }
+
+            return data;
+        }
+
+        function safe(value) {
+            const element = document.createElement("span");
+            element.textContent = value ?? "";
+            return element.innerHTML;
+        }
+
+        async function uploadFile() {
+            try {
+                const file = document.getElementById("file").files[0];
+
+                if (!file) {
+                    throw new Error("Please select an Excel file.");
+                }
+
+                const form = new FormData();
+                form.append("workbook", file);
+
+                session = await api("/api/upload", {
+                    method: "POST",
+                    body: form,
+                });
+
+                render(session);
+                document.getElementById("status").textContent =
+                    "Workbook uploaded successfully.";
+            } catch (error) {
+                document.getElementById("status").textContent = error.message;
+            }
+        }
+
+        function render(data) {
+            const sheets = document.getElementById("sheets");
+            sheets.replaceChildren();
+
+            data.sheets.forEach(name => {
+                sheets.add(new Option(name, name));
+            });
+
+            sheets.value = data.activeSheet;
+
+            const headers = data.headers
+                .map(header => `<th>${safe(header)}</th>`)
+                .join("");
+
+            const rows = data.preview.map(row =>
+                `<tr>${row.map(value => `<td>${safe(value)}</td>`).join("")}</tr>`
+            ).join("");
+
+            document.getElementById("preview").innerHTML =
+                `<p>${data.rowCount} data rows</p>
+     <table><thead><tr>${headers}</tr></thead>
+     <tbody>${rows}</tbody></table>`;
+
+            const mapping = document.getElementById("mapping");
+            mapping.replaceChildren();
+
+            data.fields.forEach(field => {
+                const label = document.createElement("label");
+                label.textContent = field.label +
+                    (field.required ? " (required)" : "");
+
+                const select = document.createElement("select");
+                select.dataset.field = field.key;
+                select.add(new Option("-- Select column --", ""));
+
+                data.headers.forEach(header => {
+                    select.add(new Option(header, header));
+                });
+
+                select.value = data.mapping[field.key] || "";
+                mapping.append(label, select);
+            });
+        }
+
+        async function loadSheet() {
+            try {
+                session = await api(`/api/sessions/${session.id}/sheet`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        sheetName: document.getElementById("sheets").value,
+                    }),
+                });
+
+                render(session);
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function saveMapping() {
+            try {
+                const mapping = {};
+
+                document.querySelectorAll("[data-field]").forEach(select => {
+                    mapping[select.dataset.field] = select.value;
+                });
+
+                const result = await api(`/api/sessions/${session.id}/mapping`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mapping }),
+                });
+                console.log('session', session)
+                session.mapping = mapping;
+                document.getElementById("status").textContent = result.message;
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function previewMapped() {
+            try {
+                const data = await api(
+                    `/api/sessions/${session.id}/normalized-preview`
+                );
+
+                const headers = data.fields
+                    .map(field => `<th>${safe(field.label)}</th>`)
+                    .join("");
+
+                const rows = data.rows.map(row =>
+                    `<tr>${data.fields.map(field =>
+                        `<td>${safe(row[field.key])}</td>`
+                    ).join("")}</tr>`
+                ).join("");
+
+                document.getElementById("mappedPreview").innerHTML =
+                    `<table><thead><tr>${headers}</tr></thead>
+       <tbody>${rows}</tbody></table>`;
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

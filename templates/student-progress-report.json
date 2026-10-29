@@ -1,6 +1,6 @@
 {
   "id": "student-progress-report",
-  "name": "Student Report Card - 1",
+  "name": "Student-Progress-Report",
   "page": {
     "width": 794,
     "height": 1123,
@@ -12,10 +12,10 @@
     {
       "id": "heading-1",
       "type": "text",
-      "x": 55,
-      "y": 45,
-      "width": 500,
-      "height": 30,
+      "x": 0,
+      "y": 48,
+      "width": 650,
+      "height": 45,
       "content": "STUDENT PROGRESS REPORT",
       "fontSize": 25,
       "fontFamily": "Arial",
@@ -26,9 +26,9 @@
     {
       "id": "name-1",
       "type": "field",
-      "x": 104,
-      "y": 129,
-      "width": 200,
+      "x": 132,
+      "y": 123,
+      "width": 320,
       "height": 30,
       "field": "studentName",
       "content": "Student Name",
@@ -41,9 +41,9 @@
     {
       "id": "class-1",
       "type": "field",
-      "x": 107,
-      "y": 163,
-      "width": 200,
+      "x": 133,
+      "y": 160,
+      "width": 320,
       "height": 30,
       "field": "className",
       "content": "Class",
@@ -54,61 +54,20 @@
       "align": "left"
     },
     {
-      "id": "1793170404214-myql8f",
-      "type": "text",
-      "x": 40,
-      "y": 130,
-      "width": 70,
-      "height": 30,
+      "id": "1793271844659-zlg3je",
+      "type": "field",
+      "x": 131,
+      "y": 194,
+      "width": 250,
+      "height": 45,
       "fontSize": 16,
       "fontFamily": "Arial",
       "color": "#111827",
       "bold": false,
       "align": "left",
-      "content": "Name: "
-    },
-    {
-      "id": "1793170428934-3bu2js",
-      "type": "text",
-      "x": 41,
-      "y": 164,
-      "width": 60,
-      "height": 30,
-      "fontSize": 16,
-      "fontFamily": "Arial",
-      "color": "#111827",
-      "bold": false,
-      "align": "left",
-      "content": "Class: "
-    },
-    {
-      "id": "1793170491086-4n0672",
-      "type": "image",
-      "x": 401,
-      "y": 108,
-      "width": 120,
-      "height": 120,
-      "fontSize": 16,
-      "fontFamily": "Arial",
-      "color": "#111827",
-      "bold": false,
-      "align": "left",
-      "content": "",
-      "alt": "Image placeholder"
-    },
-    {
-      "id": "1793170500320-297owt",
-      "type": "line",
-      "x": 40,
-      "y": 255,
-      "width": 530,
-      "height": 3,
-      "fontSize": 16,
-      "fontFamily": "Arial",
-      "color": "#374151",
-      "bold": false,
-      "align": "left"
+      "field": "studentId",
+      "content": "studentId"
     }
   ],
-  "updatedAt": "2026-10-28T06:57:21.857Z"
+  "updatedAt": "2026-10-29T11:05:07.805Z"
 }

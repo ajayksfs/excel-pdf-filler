@@ -12,6 +12,8 @@ const PAGE = {
 	unit: "px",
 };
 
+const TEMPLATE_ID = "student-progress-report";
+
 const initialElements = [
 	{
 		id: "heading-1",
@@ -132,6 +134,7 @@ function App() {
 	const [selectedRowIndex, setSelectedRowIndex] = useState(0);
 	const [previewMode, setPreviewMode] = useState(false);
 	const [dataStatus, setDataStatus] = useState("");
+	const [saveStatus, setSaveStatus] = useState("");
 
 	async function loadExcelData() {
 		if (!sessionId.trim()) {
@@ -232,14 +235,14 @@ function App() {
 		setStatus("Saving...");
 
 		const template = {
-			id: "student-progress-report",
+			id: TEMPLATE_ID,
 			name,
 			page: PAGE,
 			elements,
 		};
 
 		try {
-			const response = await fetch("http://localhost:4000/api/templates", {
+			const response = await fetch("/api/templates", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -305,10 +308,14 @@ function App() {
 			);
 		}
 
+		const isField = element.type === "field";
+
 		const displayText =
-			element.type === "field"
-				? `{{${element.field || "fieldName"}}}`
-				: element.content;
+			isField && previewMode
+				? getFieldValue(element.field)
+				: isField
+					? `{{${element.field || "fieldName"}}}`
+					: element.content;
 
 		return (
 			<div
@@ -325,6 +332,122 @@ function App() {
 			</div>
 		);
 	}
+
+
+	async function readErrorMessage(response, fallback) {
+		const contentType = response.headers.get("content-type") || "";
+		const text = await response.text();
+
+		if (contentType.includes("application/json")) {
+			try {
+				const error = JSON.parse(text);
+				return error.message || fallback;
+			} catch {
+				return fallback;
+			}
+		}
+
+		if (text.includes("Cannot POST") || text.includes("Cannot GET")) {
+			return "PDF API route not found. Restart the backend server (npm start).";
+		}
+
+		return text.slice(0, 160) || fallback;
+	}
+
+	async function downloadPdf() {
+		if (!currentPreviewRow) {
+			setSaveStatus("Load Excel data and select a student first.");
+			return;
+		}
+
+		try {
+			setSaveStatus("Generating PDF...");
+
+			const response = await fetch(
+				`/api/templates/${TEMPLATE_ID}/pdf`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ row: currentPreviewRow }),
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					await readErrorMessage(response, "PDF generation failed")
+				);
+			}
+
+			const blob = await response.blob();
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement("a");
+
+			link.href = url;
+			link.download = "student-report.pdf";
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(url);
+
+			setSaveStatus("PDF downloaded successfully.");
+		} catch (error) {
+			setSaveStatus(`PDF error: ${error.message}`);
+		}
+	}
+
+	async function downloadAllPdfs() {
+		if (excelRows.length === 0) {
+			setSaveStatus("Load Excel data before generating reports.");
+			return;
+		}
+
+		if (excelRows.length > 100) {
+			setSaveStatus(
+				"This starter supports up to 100 students per ZIP. " +
+				"Use a smaller selection for now."
+			);
+			return;
+		}
+
+		try {
+			setSaveStatus(`Generating ${excelRows.length} student reports...`);
+
+			const response = await fetch(
+				`/api/templates/${TEMPLATE_ID}/batch-pdf`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ rows: excelRows }),
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					await readErrorMessage(response, "Batch generation failed")
+				);
+			}
+
+			const blob = await response.blob();
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement("a");
+
+			link.href = url;
+			link.download = "student-reports.zip";
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(url);
+
+			setSaveStatus("Student report ZIP downloaded successfully.");
+		} catch (error) {
+			setSaveStatus(`Batch PDF error: ${error.message}`);
+		}
+	}
+
 
 	return (
 		<div className="app">
@@ -348,9 +471,22 @@ function App() {
 					<button className="primary-button" onClick={saveTemplate}>
 						Save Template
 					</button>
+					<button
+						onClick={downloadPdf}
+						disabled={!currentPreviewRow}
+					>
+						Download Student PDF
+					</button>
+
+					<button
+						onClick={downloadAllPdfs}
+						disabled={excelRows.length === 0}
+					>
+						Download All PDFs (ZIP)
+					</button>
 				</div>
 
-
+				{saveStatus && <p className="status">{saveStatus}</p>}
 			</header>
 
 			<div className="excel-toolbar">

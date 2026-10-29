@@ -6,6 +6,9 @@ const path = require("path");
 const crypto = require("crypto");
 const cors = require("cors");
 const fs = require("fs");
+const puppeteer = require("puppeteer");
+const archiver = require("archiver");
+const { renderTemplateHtml } = require("./pdfRenderer");
 
 
 
@@ -24,7 +27,7 @@ const upload = multer({
     limits: { fileSize: 15 * 1024 * 1024 },
 });
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 const templatesDir = path.join(__dirname, "templates");
 fs.mkdirSync(templatesDir, { recursive: true });
@@ -248,6 +251,215 @@ app.get("/api/templates/:id", (req, res) => {
         JSON.parse(fs.readFileSync(filePath, "utf8"))
     );
 });
+
+
+function loadTemplate(templateId) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(templateId)) {
+        const error = new Error("Invalid template ID");
+        error.status = 400;
+        throw error;
+    }
+
+    const filePath = path.join(
+        templatesDir,
+        `${templateId}.json`
+    );
+
+    if (!fs.existsSync(filePath)) {
+        const error = new Error("Template not found");
+        error.status = 404;
+        throw error;
+    }
+
+    const template = JSON.parse(
+        fs.readFileSync(filePath, "utf8")
+    );
+
+    if (!Array.isArray(template.elements)) {
+        const error = new Error("Template elements are invalid");
+        error.status = 400;
+        throw error;
+    }
+
+    return template;
+}
+
+function validateRow(row) {
+    return (
+        row !== null &&
+        typeof row === "object" &&
+        !Array.isArray(row)
+    );
+}
+
+async function createPdfBuffer(browser, template, row) {
+    const page = await browser.newPage();
+    const width = Number(template.page?.width) || 794;
+    const height = Number(template.page?.height) || 1123;
+
+    try {
+        // Match the designer canvas CSS pixel size so text does not get scaled.
+        await page.setViewport({
+            width,
+            height,
+            deviceScaleFactor: 1,
+        });
+        await page.emulateMediaType("screen");
+
+        await page.setContent(
+            renderTemplateHtml(template, row),
+            { waitUntil: "load" }
+        );
+
+        return await page.pdf({
+            width: `${width}px`,
+            height: `${height}px`,
+            printBackground: true,
+            preferCSSPageSize: true,
+            margin: {
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+            },
+        });
+    } finally {
+        await page.close();
+    }
+}
+
+// Generate a PDF for one student's row.
+app.post("/api/templates/:id/pdf", async (req, res) => {
+    let browser;
+
+    try {
+        const template = loadTemplate(req.params.id);
+        const { row } = req.body;
+
+        if (!validateRow(row)) {
+            return res.status(400).json({
+                message: "A student row object is required.",
+            });
+        }
+
+        browser = await puppeteer.launch({ headless: true });
+
+        const pdf = await createPdfBuffer(browser, template, row);
+
+        const safeName = String(
+            row.studentName || row["Student Name"] || "student"
+        )
+            .replace(/[^a-zA-Z0-9_-]/g, "_")
+            .slice(0, 80);
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${safeName || "student"}.pdf"`
+        );
+
+        return res.send(pdf);
+    } catch (error) {
+        console.error("PDF generation failed:", error);
+
+        return res.status(error.status || 500).json({
+            message: error.status
+                ? error.message
+                : "Failed to generate PDF.",
+        });
+    } finally {
+        if (browser) await browser.close();
+    }
+});
+
+// Generate one PDF per row and package them into a ZIP.
+app.post("/api/templates/:id/batch-pdf", async (req, res) => {
+    let browser;
+    let archive;
+
+    try {
+        const template = loadTemplate(req.params.id);
+        const { rows } = req.body;
+
+        if (
+            !Array.isArray(rows) ||
+            rows.length === 0 ||
+            rows.length > 100
+        ) {
+            return res.status(400).json({
+                message: "Provide between 1 and 100 student rows.",
+            });
+        }
+
+        if (!rows.every(validateRow)) {
+            return res.status(400).json({
+                message: "Every row must be a student data object.",
+            });
+        }
+
+        browser = await puppeteer.launch({ headless: true });
+
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader(
+            "Content-Disposition",
+            'attachment; filename="student-reports.zip"'
+        );
+
+        archive = archiver("zip", {
+            zlib: { level: 6 },
+        });
+
+        archive.on("error", (error) => {
+            console.error("ZIP creation failed:", error);
+
+            if (!res.headersSent) {
+                res.status(500).end("Failed to create ZIP.");
+            } else {
+                res.destroy(error);
+            }
+        });
+
+        archive.pipe(res);
+
+        for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+
+            const studentName =
+                row.studentName ||
+                row["Student Name"] ||
+                `student-${index + 1}`;
+
+            const safeName = String(studentName)
+                .replace(/[^a-zA-Z0-9_-]/g, "_")
+                .slice(0, 80);
+
+            // Prefix the index so duplicate student names do not overwrite.
+            const filename =
+                `${String(index + 1).padStart(3, "0")}-${safeName || "student"}.pdf`;
+
+            const pdf = await createPdfBuffer(browser, template, row);
+
+            archive.append(pdf, { name: filename });
+        }
+
+        await archive.finalize();
+    } catch (error) {
+        console.error("Batch PDF generation failed:", error);
+
+        if (!res.headersSent) {
+            res.status(error.status || 500).json({
+                message: error.status
+                    ? error.message
+                    : "Failed to generate student reports.",
+            });
+        } else {
+            res.destroy(error);
+        }
+    } finally {
+        if (browser) await browser.close();
+    }
+});
+
 
 app.use((error, req, res, next) => {
     console.error(error);

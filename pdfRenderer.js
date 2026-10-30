@@ -60,9 +60,9 @@ function safeImageSource(src) {
 function resolveImageSource(element, row = {}) {
     const fieldValue =
         typeof element.field === "string" &&
-        element.field &&
-        row[element.field] != null &&
-        String(row[element.field]).trim() !== ""
+            element.field &&
+            row[element.field] != null &&
+            String(row[element.field]).trim() !== ""
             ? row[element.field]
             : "";
 
@@ -113,47 +113,59 @@ function renderImage(element, row) {
     `;
 }
 
-function renderTable(element, row) {
-    const tableRows = element.field ? row[element.field] : [];
 
-    if (!Array.isArray(tableRows)) {
-        return `<div>Table data is unavailable</div>`;
+function renderTable(element, row) {
+    const field = typeof element.field === "string" ? element.field : "subjects";
+    const tableRows = Array.isArray(row?.[field]) ? row[field] : [];
+    const columns = Array.isArray(element.columns) ? element.columns : [];
+
+    if (!columns.length) {
+        return `<div>Table columns are not configured</div>`;
     }
 
-    const columns = Array.isArray(element.columns)
-        ? element.columns
-        : [];
-
-    if (!columns.length) return "";
-
-    const width = cssNumber(element.width, 300, 1, 2000);
+    const width = cssNumber(element.width, 734, 1, 2000);
     const rowHeight = cssNumber(element.rowHeight, 30, 16, 200);
-
     const columnTotal = columns.reduce(
         (sum, column) => sum + Math.max(1, Number(column.width) || 1),
         0
     );
 
-    const header = columns.map((column) => {
-        const columnWidth =
-            (Math.max(1, Number(column.width) || 1) / columnTotal) * 100;
+    const header = columns
+        .map((column) => {
+            const columnWidth =
+                (Math.max(1, Number(column.width) || 1) / columnTotal) * 100;
 
-        return `
+            return `
         <th style="width:${columnWidth}%; height:${rowHeight}px">
           ${escapeHtml(column.header || "")}
         </th>
       `;
-    }).join("");
+        })
+        .join("");
 
-    const body = tableRows.map((item) => {
-        const cells = columns.map((column) => `
-        <td style="height:${rowHeight}px">
-          ${escapeHtml(item?.[column.field] ?? "")}
-        </td>
-      `).join("");
+    const body = tableRows.length
+        ? tableRows
+            .map((item) => {
+                const cells = columns
+                    .map(
+                        (column) => `
+          <td style="height:${rowHeight}px">
+            ${escapeHtml(item?.[column.field] ?? "")}
+          </td>
+        `
+                    )
+                    .join("");
 
-        return `<tr>${cells}</tr>`;
-    }).join("");
+                return `<tr>${cells}</tr>`;
+            })
+            .join("")
+        : `
+        <tr>
+          <td colspan="${columns.length}" style="height:${rowHeight}px">
+            No subject rows
+          </td>
+        </tr>
+      `;
 
     return `
       <table class="report-table" style="width:${width}px">
@@ -162,6 +174,7 @@ function renderTable(element, row) {
       </table>
     `;
 }
+
 
 function renderElement(element, row) {
     const x = cssNumber(element.x);
@@ -216,15 +229,15 @@ function renderElement(element, row) {
 
     if (element.type === "table") {
         return `
-        <div style="
-          position:absolute;
-          left:${x}px;
-          top:${y}px;
-          width:${width}px;
-        ">
-          ${renderTable(element, row)}
-        </div>
-      `;
+          <div style="
+            position: absolute;
+            left: ${x}px;
+            top: ${y}px;
+            width: ${width}px;
+          ">
+            ${renderTable(element, row)}
+          </div>
+        `;
     }
 
     const isField = element.type === "field";

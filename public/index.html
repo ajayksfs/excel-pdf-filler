@@ -222,18 +222,41 @@
                     `/api/sessions/${session.id}/normalized-preview`
                 );
 
-                const headers = data.fields
-                    .map(field => `<th>${safe(field.label)}</th>`)
-                    .join("");
+                const headers = [
+                    ...data.fields.map(field => `<th>${safe(field.label)}</th>`),
+                    "<th>Subjects</th>",
+                ].join("");
 
-                const rows = data.rows.map(row =>
-                    `<tr>${data.fields.map(field =>
+                const rows = data.rows.map(row => {
+                    const subjectCount = Array.isArray(row.subjects)
+                        ? row.subjects.length
+                        : 0;
+                    const subjectSummary = Array.isArray(row.subjects)
+                        ? row.subjects
+                            .map(item => item.subjectName)
+                            .filter(Boolean)
+                            .join(", ")
+                        : "";
+
+                    return `<tr>${data.fields.map(field =>
                         `<td>${safe(row[field.key])}</td>`
-                    ).join("")}</tr>`
-                ).join("");
+                    ).join("")}<td>${safe(
+                        subjectCount
+                            ? `${subjectCount}: ${subjectSummary}`
+                            : "0"
+                    )}</td></tr>`;
+                }).join("");
+
+                const modeNote = data.mode
+                    ? `<p>Mode: ${safe(data.mode)}${
+                        data.subjectsSheet
+                            ? ` · Subjects sheet: ${safe(data.subjectsSheet)}`
+                            : ""
+                    }</p>`
+                    : "";
 
                 document.getElementById("mappedPreview").innerHTML =
-                    `<table><thead><tr>${headers}</tr></thead>
+                    `${modeNote}<table><thead><tr>${headers}</tr></thead>
        <tbody>${rows}</tbody></table>`;
             } catch (error) {
                 alert(error.message);

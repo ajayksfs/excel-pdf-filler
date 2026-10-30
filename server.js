@@ -33,13 +33,13 @@ const templatesDir = path.join(__dirname, "templates");
 fs.mkdirSync(templatesDir, { recursive: true });
 
 const fields = [
-    { key: "studentId", label: "Student ID", required: true },
     { key: "studentName", label: "Student Name", required: true },
+    { key: "admissionNo", label: "Admission Number", required: true },
     { key: "className", label: "Class" },
-    { key: "section", label: "Section" },
-    { key: "admissionNumber", label: "Admission Number" },
-    { key: "dateOfBirth", label: "Date of Birth" },
+    { key: "studentPhoto", label: "Student Photo" },
 ];
+
+const SUBJECT_COLUMNS = ["subjectName", "maxMarks", "marksObtained"];
 
 function readSheet(workbook, name) {
     const data = XLSX.utils.sheet_to_json(
@@ -60,6 +60,131 @@ function readSheet(workbook, name) {
     return { headers, rows };
 }
 
+function sheetToObjects(workbook, sheetName) {
+    const { headers, rows } = readSheet(workbook, sheetName);
+
+    return rows.map((row) => {
+        const object = {};
+
+        headers.forEach((header, index) => {
+            object[header] = row[index] ?? "";
+        });
+
+        return object;
+    });
+}
+
+function findSheetName(workbook, candidates) {
+    const names = workbook.SheetNames || [];
+
+    for (const candidate of candidates) {
+        const match = names.find(
+            (name) => name.trim().toLowerCase() === candidate.toLowerCase()
+        );
+
+        if (match) return match;
+    }
+
+    return null;
+}
+
+/**
+ * Builds one report row per student.
+ * When Students + Subjects sheets exist, Subjects rows are grouped by
+ * admissionNo into each student's `subjects` array for repeating tables.
+ */
+function buildNormalizedStudents(workbook) {
+    const studentsSheet =
+        findSheetName(workbook, ["Students", "Student"]) ||
+        workbook.SheetNames[0];
+
+    if (!studentsSheet) {
+        return {
+            mode: "empty",
+            studentsSheet: null,
+            subjectsSheet: null,
+            rows: [],
+            headers: [],
+        };
+    }
+
+    const subjectsSheet = findSheetName(workbook, ["Subjects", "Subject"]);
+    const students = sheetToObjects(workbook, studentsSheet);
+    const studentHeaders = Object.keys(students[0] || {});
+
+    if (!subjectsSheet) {
+        const rows = students.map((student) => ({
+            ...student,
+            subjects: Array.isArray(student.subjects) ? student.subjects : [],
+        }));
+
+        return {
+            mode: "single-sheet",
+            studentsSheet,
+            subjectsSheet: null,
+            rows,
+            headers: [...studentHeaders, "subjects"],
+        };
+    }
+
+    const subjectRows = sheetToObjects(workbook, subjectsSheet);
+    const subjectsByAdmission = new Map();
+
+    for (const subject of subjectRows) {
+        const key = String(subject.admissionNo ?? "").trim();
+
+        if (!key) continue;
+
+        if (!subjectsByAdmission.has(key)) {
+            subjectsByAdmission.set(key, []);
+        }
+
+        const entry = {};
+
+        for (const column of SUBJECT_COLUMNS) {
+            entry[column] = subject[column] ?? "";
+        }
+
+        // Keep any extra subject columns as well.
+        for (const [keyName, value] of Object.entries(subject)) {
+            if (keyName === "admissionNo" || keyName in entry) continue;
+            entry[keyName] = value;
+        }
+
+        subjectsByAdmission.get(key).push(entry);
+    }
+
+    const rows = students.map((student) => {
+        const key = String(student.admissionNo ?? "").trim();
+
+        return {
+            ...student,
+            subjects: subjectsByAdmission.get(key) || [],
+        };
+    });
+
+    return {
+        mode: "students-subjects",
+        studentsSheet,
+        subjectsSheet,
+        rows,
+        headers: [...new Set([...studentHeaders, "subjects"])],
+    };
+}
+
+function refreshSessionData(session) {
+    const active = readSheet(session.workbook, session.activeSheet);
+    session.headers = active.headers;
+    session.rows = active.rows;
+
+    const normalized = buildNormalizedStudents(session.workbook);
+    session.normalizedMode = normalized.mode;
+    session.studentsSheet = normalized.studentsSheet;
+    session.subjectsSheet = normalized.subjectsSheet;
+    session.normalizedRows = normalized.rows;
+    session.normalizedHeaders = normalized.headers;
+}
+
 function getSessionData(session) {
     return {
         id: session.id,
@@ -71,6 +196,11 @@ function getSessionData(session) {
         rowCount: session.rows.length,
         fields,
         mapping: session.mapping,
+        normalizedMode: session.normalizedMode,
+        studentsSheet: session.studentsSheet,
+        subjectsSheet: session.subjectsSheet,
+        normalizedRowCount: session.normalizedRows?.length || 0,
+        repeatingFields: ["subjects"],
     };
 }
 
@@ -81,9 +211,11 @@ app.post("/api/upload", upload.single("workbook"), (req, res, next) => {
         }
 
         const workbook = XLSX.readFile(req.file.path);
-        const activeSheet = workbook.SheetNames[0];
+        const studentsSheet =
+            findSheetName(workbook, ["Students", "Student"]) ||
+            workbook.SheetNames[0];
 
-        if (!activeSheet) {
+        if (!studentsSheet) {
             return res.status(400).json({ error: "No worksheet found." });
         }
 
@@ -91,10 +223,20 @@ app.post("/api/upload", upload.single("workbook"), (req, res, next) => {
             id: crypto.randomUUID(),
             filename: req.file.originalname,
             workbook,
-            activeSheet,
-            ...readSheet(workbook, activeSheet),
+            activeSheet: studentsSheet,
             mapping: {},
         };
+
+        refreshSessionData(session);
+
+        // Auto-map matching column names when Students/Subjects workbooks are used.
+        if (session.normalizedMode === "students-subjects") {
+            for (const field of fields) {
+                if (session.headers.includes(field.key)) {
+                    session.mapping[field.key] = field.key;
+                }
+            }
+        }
 
         sessions.set(session.id, session);
         res.json(getSessionData(session));
@@ -117,8 +259,8 @@ app.post("/api/sessions/:id/sheet", (req, res) => {
     }
 
     session.activeSheet = sheetName;
-    Object.assign(session, readSheet(session.workbook, sheetName));
     session.mapping = {};
+    refreshSessionData(session);
 
     res.json(getSessionData(session));
 });
@@ -164,7 +306,26 @@ app.get("/api/sessions/:id/normalized-preview", (req, res) => {
         return res.status(404).json({ error: "Session not found." });
     }
 
-    const rows = session.rows.slice(0, 10).map(row => {
+    // Preferred path: Students + Subjects joined rows (includes subjects[]).
+    if (
+        Array.isArray(session.normalizedRows) &&
+        session.normalizedRows.length > 0 &&
+        session.normalizedMode === "students-subjects"
+    ) {
+        return res.json({
+            totalRows: session.normalizedRows.length,
+            fields,
+            headers: session.normalizedHeaders || [],
+            repeatingFields: ["subjects"],
+            mode: session.normalizedMode,
+            studentsSheet: session.studentsSheet,
+            subjectsSheet: session.subjectsSheet,
+            rows: session.normalizedRows,
+        });
+    }
+
+    // Fallback: map active-sheet columns into field keys.
+    const rows = session.rows.map((row) => {
         const result = {};
 
         for (const field of fields) {
@@ -173,12 +334,33 @@ app.get("/api/sessions/:id/normalized-preview", (req, res) => {
             result[field.key] = index >= 0 ? row[index] : "";
         }
 
+        // Preserve a subjects array when the active sheet already embeds it.
+        result.subjects = [];
+
         return result;
     });
 
+    // Single-sheet normalized objects may already include subjects.
+    if (
+        Array.isArray(session.normalizedRows) &&
+        session.normalizedRows.length > 0
+    ) {
+        return res.json({
+            totalRows: session.normalizedRows.length,
+            fields,
+            headers: session.normalizedHeaders || fields.map((field) => field.key),
+            repeatingFields: ["subjects"],
+            mode: session.normalizedMode || "single-sheet",
+            rows: session.normalizedRows,
+        });
+    }
+
     res.json({
-        totalRows: session.rows.length,
+        totalRows: rows.length,
         fields,
+        headers: fields.map((field) => field.key),
+        repeatingFields: ["subjects"],
+        mode: "mapped",
         rows,
     });
 });

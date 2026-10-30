@@ -45,12 +45,27 @@ const initialElements = [
 		align: "left",
 	},
 	{
+		id: "admission-1",
+		type: "field",
+		x: 60,
+		y: 160,
+		width: 320,
+		height: 28,
+		field: "admissionNo",
+		content: "Admission No",
+		fontSize: 14,
+		fontFamily: "Arial",
+		color: "#111827",
+		bold: false,
+		align: "left",
+	},
+	{
 		id: "class-1",
 		type: "field",
 		x: 60,
-		y: 170,
+		y: 195,
 		width: 320,
-		height: 30,
+		height: 28,
 		field: "className",
 		content: "Class",
 		fontSize: 14,
@@ -58,6 +73,33 @@ const initialElements = [
 		color: "#111827",
 		bold: false,
 		align: "left",
+	},
+	{
+		id: "photo-1",
+		type: "image",
+		x: 620,
+		y: 110,
+		width: 100,
+		height: 100,
+		src: "",
+		field: "studentPhoto",
+		alt: "Student photo",
+		objectFit: "contain",
+	},
+	{
+		id: "subject-table",
+		type: "table",
+		x: 30,
+		y: 250,
+		width: 734,
+		height: 240,
+		rowHeight: 30,
+		field: "subjects",
+		columns: [
+			{ header: "Subject", field: "subjectName", width: 334 },
+			{ header: "Maximum Marks", field: "maxMarks", width: 200 },
+			{ header: "Marks Obtained", field: "marksObtained", width: 200 },
+		],
 	},
 ];
 
@@ -189,17 +231,29 @@ function App() {
 				throw new Error("The API did not return an array of rows.");
 			}
 
+			const sample = rows[0] && !Array.isArray(rows[0]) ? rows[0] : null;
 			const headers =
 				result.headers ??
 				result.columns ??
-				(rows.length && !Array.isArray(rows[0])
-					? Object.keys(rows[0])
+				(sample
+					? Object.keys(sample)
 					: []);
 
-			setExcelHeaders(headers);
+			const scalarHeaders = headers.filter((header) => {
+				if (!sample) return header !== "subjects";
+				return !Array.isArray(sample[header]);
+			});
+
+			setExcelHeaders(scalarHeaders);
 			setExcelRows(rows);
 			setSelectedRowIndex(0);
-			setDataStatus(`Loaded ${rows.length} Excel rows.`);
+
+			const modeNote =
+				result.mode === "students-subjects"
+					? " (Students + Subjects joined)"
+					: "";
+
+			setDataStatus(`Loaded ${rows.length} student rows${modeNote}.`);
 		} catch (error) {
 			setExcelHeaders([]);
 			setExcelRows([]);
@@ -344,16 +398,35 @@ function App() {
 		}
 
 		if (element.type === "table") {
+			const columns = element.columns || [];
+			const tableRows =
+				previewMode && currentPreviewRow && element.field
+					? Array.isArray(currentPreviewRow[element.field])
+						? currentPreviewRow[element.field]
+						: []
+					: [];
+
 			return (
 				<div style={{ width: "100%", overflow: "hidden" }}>
-					<strong>{element.field || "Table data"}</strong>
-					<table style={{ width: "100%", borderCollapse: "collapse" }}>
+					<table
+						style={{
+							width: "100%",
+							borderCollapse: "collapse",
+							fontSize: 12,
+							tableLayout: "fixed",
+						}}
+					>
 						<thead>
 							<tr>
-								{(element.columns || []).map((column, index) => (
+								{columns.map((column, index) => (
 									<th
 										key={index}
-										style={{ border: "1px solid #999", padding: 4 }}
+										style={{
+											border: "1px solid #333",
+											padding: 4,
+											background: "#f0f0f0",
+											width: column.width || undefined,
+										}}
 									>
 										{column.header}
 									</th>
@@ -361,14 +434,44 @@ function App() {
 							</tr>
 						</thead>
 						<tbody>
-							<tr>
-								<td
-									colSpan={Math.max(1, element.columns?.length || 1)}
-									style={{ border: "1px solid #999", padding: 4 }}
-								>
-									Repeating data: {element.field}
-								</td>
-							</tr>
+							{previewMode ? (
+								tableRows.length ? (
+									tableRows.map((item, rowIndex) => (
+										<tr key={rowIndex}>
+											{columns.map((column, colIndex) => (
+												<td
+													key={colIndex}
+													style={{
+														border: "1px solid #333",
+														padding: 4,
+														height: element.rowHeight || 30,
+													}}
+												>
+													{item?.[column.field] ?? ""}
+												</td>
+											))}
+										</tr>
+									))
+								) : (
+									<tr>
+										<td
+											colSpan={Math.max(1, columns.length)}
+											style={{ border: "1px solid #333", padding: 4 }}
+										>
+											No rows in {element.field || "table"}
+										</td>
+									</tr>
+								)
+							) : (
+								<tr>
+									<td
+										colSpan={Math.max(1, columns.length)}
+										style={{ border: "1px solid #333", padding: 4 }}
+									>
+										{`{{${element.field || "subjects"}}}`} repeating rows
+									</td>
+								</tr>
+							)}
 						</tbody>
 					</table>
 				</div>
@@ -656,6 +759,7 @@ function App() {
 							style={{
 								width: PAGE.width,
 								height: PAGE.height,
+								margin: "0 auto",
 							}}
 							onClick={() => setSelectedId(null)}
 						>
@@ -838,16 +942,17 @@ function App() {
 							{selected.type === "table" && (
 								<>
 									<label>
-										Data field
-										<input
-											value={selected.field || ""}
+										Repeating data field
+										<select
+											value={selected.field || "subjects"}
 											onChange={(event) =>
 												updateElement(selected.id, {
 													field: event.target.value,
 												})
 											}
-											placeholder="subjects"
-										/>
+										>
+											<option value="subjects">subjects</option>
+										</select>
 									</label>
 
 									<label>
@@ -866,8 +971,8 @@ function App() {
 									</label>
 
 									<p className="hint">
-										Configure the table columns in the element's columns array.
-										A column has a header, a data field, and a width.
+										Uses the Subjects sheet rows linked by admissionNo.
+										Columns: subjectName, maxMarks, marksObtained.
 									</p>
 								</>
 							)}

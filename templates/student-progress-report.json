@@ -1,6 +1,6 @@
 {
   "id": "student-progress-report",
-  "name": "Student-Progress-Report",
+  "name": "Student Progress Report",
   "page": {
     "width": 794,
     "height": 1123,
@@ -12,8 +12,8 @@
     {
       "id": "heading-1",
       "type": "text",
-      "x": 0,
-      "y": 48,
+      "x": 70,
+      "y": 45,
       "width": 650,
       "height": 45,
       "content": "STUDENT PROGRESS REPORT",
@@ -26,8 +26,8 @@
     {
       "id": "name-1",
       "type": "field",
-      "x": 132,
-      "y": 123,
+      "x": 60,
+      "y": 125,
       "width": 320,
       "height": 30,
       "field": "studentName",
@@ -41,8 +41,8 @@
     {
       "id": "class-1",
       "type": "field",
-      "x": 133,
-      "y": 160,
+      "x": 60,
+      "y": 170,
       "width": 320,
       "height": 30,
       "field": "className",
@@ -54,20 +54,17 @@
       "align": "left"
     },
     {
-      "id": "1793271844659-zlg3je",
-      "type": "field",
-      "x": 131,
-      "y": 194,
-      "width": 250,
-      "height": 45,
-      "fontSize": 16,
-      "fontFamily": "Arial",
-      "color": "#111827",
-      "bold": false,
-      "align": "left",
-      "field": "studentId",
-      "content": "studentId"
+      "id": "a5fd7e6a-a24a-4620-a7a3-b80c2f72786b",
+      "type": "image",
+      "x": 438,
+      "y": 118,
+      "width": 100,
+      "height": 100,
+      "src": "https://aws-sfs.s3.ap-south-1.amazonaws.com/dpsindp/2025-26/miscellanious/Sushil%20D-20260310221532.jpg",
+      "field": "",
+      "alt": "Report image",
+      "objectFit": "contain"
     }
   ],
-  "updatedAt": "2026-10-29T11:05:07.805Z"
+  "updatedAt": "2026-10-30T07:19:13.087Z"
 }

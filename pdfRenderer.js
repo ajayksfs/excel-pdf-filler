@@ -13,163 +13,335 @@ function escapeHtml(value) {
     });
 }
 
-function cssColor(value, fallback = "#111827") {
-    // Only accept simple hex colors from saved template properties.
-    return typeof value === "string" &&
-        /^#[0-9a-fA-F]{3,8}$/.test(value)
+function cssColor(value, fallback = "#000000") {
+    return /^#[0-9a-fA-F]{3,8}$/.test(value || "")
         ? value
         : fallback;
 }
 
-function renderElement(element, row) {
-    const x = Number(element.x) || 0;
-    const y = Number(element.y) || 0;
-    const width = Math.max(1, Number(element.width) || 1);
-    const height = Math.max(1, Number(element.height) || 1);
+function cssNumber(value, fallback = 0, min = 0, max = 10000) {
+    const number = Number(value);
 
-    const positionStyle = [
-        "position:absolute",
-        `left:${x}px`,
-        `top:${y}px`,
-        `width:${width}px`,
-        `height:${height}px`,
-        "box-sizing:border-box",
-    ].join(";");
+    if (!Number.isFinite(number)) return fallback;
+
+    return Math.min(max, Math.max(min, number));
+}
+
+function safeImageSource(src) {
+    if (typeof src !== "string") return "";
+
+    const value = src.trim();
+
+    if (!value) return "";
+
+    // Allow embedded images (PNG/JPEG/GIF/WebP).
+    if (
+        /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-zA-Z0-9+/=\s]+$/i.test(
+            value
+        )
+    ) {
+        return value.replace(/\s/g, "");
+    }
+
+    try {
+        const url = new URL(value);
+
+        // Allow http(s) remote images used in report templates.
+        if (url.protocol === "https:" || url.protocol === "http:") {
+            return url.href;
+        }
+    } catch {
+        // Invalid URL.
+    }
+
+    return "";
+}
+
+function resolveImageSource(element, row = {}) {
+    const fieldValue =
+        typeof element.field === "string" &&
+        element.field &&
+        row[element.field] != null &&
+        String(row[element.field]).trim() !== ""
+            ? row[element.field]
+            : "";
+
+    return safeImageSource(
+        fieldValue || element.src || element.content || ""
+    );
+}
+
+function renderImage(element, row) {
+    const src = resolveImageSource(element, row);
+
+    const fit = ["contain", "cover", "fill", "none"].includes(element.objectFit)
+        ? element.objectFit
+        : "contain";
+
+    if (!src) {
+        return `
+          <div style="
+            width:100%;
+            height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            border:1px dashed #9ca3af;
+            color:#6b7280;
+            font-size:12px;
+            background:#f9fafb;
+          ">Image</div>
+        `;
+    }
+
+    // Keep data URIs unescaped so base64 payloads stay valid.
+    const safeSrc = src.startsWith("data:")
+        ? src.replace(/"/g, "")
+        : escapeHtml(src);
+
+    return `
+      <img
+        src="${safeSrc}"
+        alt="${escapeHtml(element.alt || "Report image")}"
+        style="
+          width: 100%;
+          height: 100%;
+          object-fit: ${fit};
+          display: block;
+        "
+      />
+    `;
+}
+
+function renderTable(element, row) {
+    const tableRows = element.field ? row[element.field] : [];
+
+    if (!Array.isArray(tableRows)) {
+        return `<div>Table data is unavailable</div>`;
+    }
+
+    const columns = Array.isArray(element.columns)
+        ? element.columns
+        : [];
+
+    if (!columns.length) return "";
+
+    const width = cssNumber(element.width, 300, 1, 2000);
+    const rowHeight = cssNumber(element.rowHeight, 30, 16, 200);
+
+    const columnTotal = columns.reduce(
+        (sum, column) => sum + Math.max(1, Number(column.width) || 1),
+        0
+    );
+
+    const header = columns.map((column) => {
+        const columnWidth =
+            (Math.max(1, Number(column.width) || 1) / columnTotal) * 100;
+
+        return `
+        <th style="width:${columnWidth}%; height:${rowHeight}px">
+          ${escapeHtml(column.header || "")}
+        </th>
+      `;
+    }).join("");
+
+    const body = tableRows.map((item) => {
+        const cells = columns.map((column) => `
+        <td style="height:${rowHeight}px">
+          ${escapeHtml(item?.[column.field] ?? "")}
+        </td>
+      `).join("");
+
+        return `<tr>${cells}</tr>`;
+    }).join("");
+
+    return `
+      <table class="report-table" style="width:${width}px">
+        <thead><tr>${header}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    `;
+}
+
+function renderElement(element, row) {
+    const x = cssNumber(element.x);
+    const y = cssNumber(element.y);
+    const width = cssNumber(element.width, 100, 1, 10000);
+    const height = cssNumber(element.height, 30, 1, 10000);
 
     if (element.type === "line") {
         return `
-        <div style="${positionStyle};
-          background:${cssColor(element.color, "#374151")}">
-        </div>
+        <div style="
+          position:absolute;
+          left:${x}px;
+          top:${y}px;
+          width:${width}px;
+          height:${Math.max(1, height)}px;
+          border-top:${cssNumber(element.borderWidth, 1, 1, 20)}px
+            solid ${cssColor(element.color)};
+        "></div>
       `;
     }
 
     if (element.type === "rectangle") {
-        const borderWidth = Math.min(
-            10,
-            Math.max(0, Number(element.borderWidth) || 0)
-        );
-
         return `
-        <div style="${positionStyle};
-          background:${cssColor(element.fill, "#ffffff")};
-          border:${borderWidth}px solid
-            ${cssColor(element.borderColor, "#374151")}">
-        </div>
+        <div style="
+          position:absolute;
+          left:${x}px;
+          top:${y}px;
+          width:${width}px;
+          height:${height}px;
+          box-sizing:border-box;
+          border:${cssNumber(element.borderWidth, 1, 0, 20)}px
+            solid ${cssColor(element.borderColor)};
+          background:${cssColor(element.backgroundColor, "#ffffff")};
+        "></div>
       `;
     }
 
     if (element.type === "image") {
-        // Image rendering is intentionally not enabled yet.
-        // Add validated local assets or trusted image URLs in a later step.
         return `
-        <div style="${positionStyle};
-          border:1px dashed #9ca3af;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          color:#6b7280;
-          font-size:12px">
-          Image placeholder
+        <div style="
+          position:absolute;
+          left:${x}px;
+          top:${y}px;
+          width:${width}px;
+          height:${height}px;
+          overflow:hidden;
+        ">
+          ${renderImage(element, row)}
         </div>
       `;
     }
 
-    let value = "";
-
-    if (element.type === "field") {
-        const field = element.field;
-
-        if (typeof field === "string" && field.length > 0) {
-            value = row[field] ?? "";
-        }
-    } else {
-        value = element.content ?? "";
+    if (element.type === "table") {
+        return `
+        <div style="
+          position:absolute;
+          left:${x}px;
+          top:${y}px;
+          width:${width}px;
+        ">
+          ${renderTable(element, row)}
+        </div>
+      `;
     }
 
-    const fontSize = Math.min(
-        96,
-        Math.max(6, Number(element.fontSize) || 16)
-    );
+    const isField = element.type === "field";
+    const rawValue = isField
+        ? row[element.field]
+        : element.content;
 
-    const allowedFonts = [
+    const value = rawValue == null ? "" : String(rawValue);
+    const fontSize = cssNumber(element.fontSize, 14, 6, 96);
+    const fontFamily = [
         "Arial",
         "Helvetica",
         "Times New Roman",
         "Georgia",
         "Verdana",
-    ];
-
-    const fontFamily = allowedFonts.includes(element.fontFamily)
+    ].includes(element.fontFamily)
         ? element.fontFamily
         : "Arial";
 
-    const alignment = ["left", "center", "right"].includes(element.align)
+    const align = ["left", "center", "right"].includes(element.align)
         ? element.align
         : "left";
 
     return `
-      <div style="${positionStyle};
-        padding:2px;
-        overflow:hidden;
-        overflow-wrap:anywhere;
-        white-space:pre-wrap;
-        font-family:'${fontFamily}';
+      <div style="
+        position:absolute;
+        left:${x}px;
+        top:${y}px;
+        width:${width}px;
+        min-height:${height}px;
+        box-sizing:border-box;
+        font-family:${fontFamily};
         font-size:${fontSize}px;
-        color:${cssColor(element.color)};
         font-weight:${element.bold ? "bold" : "normal"};
-        text-align:${alignment}">
-        ${escapeHtml(value)}
-      </div>
+        color:${cssColor(element.color)};
+        text-align:${align};
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+      ">${escapeHtml(value)}</div>
     `;
 }
 
 function renderTemplateHtml(template, row) {
-    const width = Number(template.page?.width) || 794;
-    const height = Number(template.page?.height) || 1123;
+    const pageWidth = cssNumber(template.page?.width, 794, 1, 5000);
+    const pageHeight = cssNumber(template.page?.height, 1123, 1, 10000);
+    const elements = Array.isArray(template.elements)
+        ? template.elements
+        : [];
 
-    const elementsHtml = template.elements
+    const content = elements
         .map((element) => renderElement(element, row))
-        .join("\n");
+        .join("");
 
-    // Use the same CSS pixel page as the designer canvas so layout matches 1:1.
-    return `<!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="UTF-8">
-    <title>${escapeHtml(template.name || "Report")}</title>
-    <style>
-      @page {
-        size: ${width}px ${height}px;
-        margin: 0;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: ${width}px;
-        height: ${height}px;
-      }
-
-      .report-page {
-        position: relative;
-        width: ${width}px;
-        height: ${height}px;
-        overflow: hidden;
-        background: #ffffff;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="report-page">
-      ${elementsHtml}
-    </div>
-  </body>
-  </html>`;
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            @page {
+              size: A4 ${template.page?.orientation === "landscape"
+            ? "landscape"
+            : "portrait"};
+              margin: 0;
+            }
+  
+            * {
+              box-sizing: border-box;
+            }
+  
+            html, body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, sans-serif;
+            }
+  
+            .report-page {
+              position: relative;
+              width: ${pageWidth}px;
+              height: ${pageHeight}px;
+              overflow: visible;
+              background: white;
+            }
+  
+            .report-table {
+              border-collapse: collapse;
+              table-layout: fixed;
+              font-family: Arial, sans-serif;
+              font-size: 12px;
+            }
+  
+            .report-table th,
+            .report-table td {
+              border: 1px solid #333;
+              padding: 5px;
+              text-align: left;
+              overflow-wrap: anywhere;
+            }
+  
+            .report-table th {
+              background: #f0f0f0;
+              font-weight: bold;
+            }
+  
+            .report-table tr {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+          </style>
+        </head>
+        <body>
+          <main class="report-page">
+            ${content}
+          </main>
+        </body>
+      </html>
+    `;
 }
 
 module.exports = { renderTemplateHtml };

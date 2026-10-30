@@ -112,11 +112,34 @@ function makeElement(type) {
 
 	if (type === "image") {
 		return {
-			...base,
-			width: 120,
-			height: 120,
-			content: "",
-			alt: "Image placeholder",
+			id: crypto.randomUUID(),
+			type: "image",
+			x: 50,
+			y: 100,
+			width: 100,
+			height: 100,
+			src: "",
+			field: "",
+			alt: "Report image",
+			objectFit: "contain",
+		};
+	}
+
+	if (type === "table") {
+		return {
+			id: crypto.randomUUID(),
+			type: "table",
+			x: 30,
+			y: 250,
+			width: 734,
+			height: 200,
+			rowHeight: 30,
+			field: "subjects",
+			columns: [
+				{ header: "Subject", field: "subjectName", width: 434 },
+				{ header: "Maximum Marks", field: "maxMarks", width: 150 },
+				{ header: "Marks Obtained", field: "marksObtained", width: 150 },
+			],
 		};
 	}
 
@@ -294,16 +317,60 @@ function App() {
 		}
 
 		if (element.type === "image") {
-			return (
+			const imageSrc =
+				(previewMode && element.field
+					? getFieldValue(element.field)
+					: "") ||
+				element.src ||
+				"";
+
+			return imageSrc ? (
+				<img
+					src={imageSrc}
+					alt={element.alt || "Report image"}
+					draggable={false}
+					style={{
+						width: "100%",
+						height: "100%",
+						objectFit: element.objectFit || "contain",
+						background: "#f1f1f1",
+					}}
+				/>
+			) : (
 				<div className="image-placeholder">
-					{element.content ? (
-						<img
-							src={element.content}
-							alt={element.alt || "Template image"}
-						/>
-					) : (
-						<span>Image placeholder</span>
-					)}
+					<span>Image placeholder</span>
+				</div>
+			);
+		}
+
+		if (element.type === "table") {
+			return (
+				<div style={{ width: "100%", overflow: "hidden" }}>
+					<strong>{element.field || "Table data"}</strong>
+					<table style={{ width: "100%", borderCollapse: "collapse" }}>
+						<thead>
+							<tr>
+								{(element.columns || []).map((column, index) => (
+									<th
+										key={index}
+										style={{ border: "1px solid #999", padding: 4 }}
+									>
+										{column.header}
+									</th>
+								))}
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td
+									colSpan={Math.max(1, element.columns?.length || 1)}
+									style={{ border: "1px solid #999", padding: 4 }}
+								>
+									Repeating data: {element.field}
+								</td>
+							</tr>
+						</tbody>
+					</table>
 				</div>
 			);
 		}
@@ -560,7 +627,11 @@ function App() {
 					</button>
 
 					<button onClick={() => addElement("image")}>
-						+ Image placeholder
+						+ Image
+					</button>
+
+					<button onClick={() => addElement("table")}>
+						+ Table
 					</button>
 
 					<hr />
@@ -719,29 +790,85 @@ function App() {
 							{selected.type === "image" && (
 								<>
 									<label>
-										Image URL
+										Image URL or data URI
 										<input
-											value={selected.content || ""}
-											placeholder="https://example.com/logo.png"
+											value={selected.src || ""}
 											onChange={(event) =>
 												updateElement(selected.id, {
-													content: event.target.value,
+													src: event.target.value,
+													field: "",
+												})
+											}
+											placeholder="https://qa.schoolforschools.ai/assets/user-placeholder--3o1MXL2.jpg"
+										/>
+									</label>
+
+									<label>
+										Image field from Excel data
+										<input
+											value={selected.field || ""}
+											onChange={(event) =>
+												updateElement(selected.id, {
+													field: event.target.value,
+													src: "",
+												})
+											}
+											placeholder="studentPhoto"
+										/>
+									</label>
+
+									<label>
+										Fit
+										<select
+											value={selected.objectFit || "contain"}
+											onChange={(event) =>
+												updateElement(selected.id, {
+													objectFit: event.target.value,
+												})
+											}
+										>
+											<option value="contain">Contain</option>
+											<option value="cover">Cover</option>
+											<option value="fill">Fill</option>
+										</select>
+									</label>
+								</>
+							)}
+
+							{selected.type === "table" && (
+								<>
+									<label>
+										Data field
+										<input
+											value={selected.field || ""}
+											onChange={(event) =>
+												updateElement(selected.id, {
+													field: event.target.value,
+												})
+											}
+											placeholder="subjects"
+										/>
+									</label>
+
+									<label>
+										Row height
+										<input
+											type="number"
+											min="16"
+											max="200"
+											value={selected.rowHeight || 30}
+											onChange={(event) =>
+												updateElement(selected.id, {
+													rowHeight: Number(event.target.value),
 												})
 											}
 										/>
 									</label>
 
-									<label>
-										Alternative text
-										<input
-											value={selected.alt || ""}
-											onChange={(event) =>
-												updateElement(selected.id, {
-													alt: event.target.value,
-												})
-											}
-										/>
-									</label>
+									<p className="hint">
+										Configure the table columns in the element's columns array.
+										A column has a header, a data field, and a width.
+									</p>
 								</>
 							)}
 

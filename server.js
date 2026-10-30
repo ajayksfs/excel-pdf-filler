@@ -306,10 +306,39 @@ async function createPdfBuffer(browser, template, row) {
         });
         await page.emulateMediaType("screen");
 
-        await page.setContent(
-            renderTemplateHtml(template, row),
-            { waitUntil: "load" }
-        );
+        // domcontentloaded avoids hanging forever on broken/slow image URLs.
+        await page.setContent(renderTemplateHtml(template, row), {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+        });
+
+        // Best-effort wait for images; never block PDF generation on them.
+        await page
+            .evaluate(async () => {
+                const images = Array.from(document.images);
+
+                await Promise.all(
+                    images.map(
+                        (image) =>
+                            new Promise((resolve) => {
+                                if (image.complete) {
+                                    resolve();
+                                    return;
+                                }
+
+                                const done = () => resolve();
+                                image.addEventListener("load", done, {
+                                    once: true,
+                                });
+                                image.addEventListener("error", done, {
+                                    once: true,
+                                });
+                                setTimeout(done, 5000);
+                            })
+                    )
+                );
+            })
+            .catch(() => {});
 
         return await page.pdf({
             width: `${width}px`,
@@ -363,9 +392,7 @@ app.post("/api/templates/:id/pdf", async (req, res) => {
         console.error("PDF generation failed:", error);
 
         return res.status(error.status || 500).json({
-            message: error.status
-                ? error.message
-                : "Failed to generate PDF.",
+            message: error.message || "Failed to generate PDF.",
         });
     } finally {
         if (browser) await browser.close();

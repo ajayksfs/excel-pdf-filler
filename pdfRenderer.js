@@ -1,3 +1,9 @@
+const { normalizeTemplate } = require("./templateUtils");
+const {
+    cssNumber,
+    getTableRows,
+    paginatePagesForTables,
+} = require("./tablePagination");
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => {
@@ -19,14 +25,6 @@ function cssColor(value, fallback = "#000000") {
         : fallback;
 }
 
-function cssNumber(value, fallback = 0, min = 0, max = 10000) {
-    const number = Number(value);
-
-    if (!Number.isFinite(number)) return fallback;
-
-    return Math.min(max, Math.max(min, number));
-}
-
 function safeImageSource(src) {
     if (typeof src !== "string") return "";
 
@@ -34,7 +32,6 @@ function safeImageSource(src) {
 
     if (!value) return "";
 
-    // Allow embedded images (PNG/JPEG/GIF/WebP).
     if (
         /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-zA-Z0-9+/=\s]+$/i.test(
             value
@@ -46,7 +43,6 @@ function safeImageSource(src) {
     try {
         const url = new URL(value);
 
-        // Allow http(s) remote images used in report templates.
         if (url.protocol === "https:" || url.protocol === "http:") {
             return url.href;
         }
@@ -60,9 +56,9 @@ function safeImageSource(src) {
 function resolveImageSource(element, row = {}) {
     const fieldValue =
         typeof element.field === "string" &&
-            element.field &&
-            row[element.field] != null &&
-            String(row[element.field]).trim() !== ""
+        element.field &&
+        row[element.field] != null &&
+        String(row[element.field]).trim() !== ""
             ? row[element.field]
             : "";
 
@@ -94,7 +90,6 @@ function renderImage(element, row) {
         `;
     }
 
-    // Keep data URIs unescaped so base64 payloads stay valid.
     const safeSrc = src.startsWith("data:")
         ? src.replace(/"/g, "")
         : escapeHtml(src);
@@ -113,10 +108,8 @@ function renderImage(element, row) {
     `;
 }
 
-
 function renderTable(element, row) {
-    const field = typeof element.field === "string" ? element.field : "subjects";
-    const tableRows = Array.isArray(row?.[field]) ? row[field] : [];
+    const tableRows = getTableRows(element, row);
     const columns = Array.isArray(element.columns) ? element.columns : [];
 
     if (!columns.length) {
@@ -175,7 +168,6 @@ function renderTable(element, row) {
     `;
 }
 
-
 function renderElement(element, row) {
     const x = cssNumber(element.x);
     const y = cssNumber(element.y);
@@ -207,7 +199,7 @@ function renderElement(element, row) {
           box-sizing:border-box;
           border:${cssNumber(element.borderWidth, 1, 0, 20)}px
             solid ${cssColor(element.borderColor)};
-          background:${cssColor(element.backgroundColor, "#ffffff")};
+          background:${cssColor(element.backgroundColor || element.fill, "#ffffff")};
         "></div>
       `;
     }
@@ -280,16 +272,40 @@ function renderElement(element, row) {
     `;
 }
 
-function renderTemplateHtml(template, row) {
-    const pageWidth = cssNumber(template.page?.width, 794, 1, 5000);
-    const pageHeight = cssNumber(template.page?.height, 1123, 1, 10000);
-    const elements = Array.isArray(template.elements)
-        ? template.elements
-        : [];
-
+function renderPage(page, row, pageNumber, totalPages) {
+    const elements = Array.isArray(page?.elements) ? page.elements : [];
     const content = elements
         .map((element) => renderElement(element, row))
         .join("");
+
+    return `
+      <section class="report-page" data-page-id="${escapeHtml(page?.id || "")}">
+        ${content}
+        <div class="page-number">Page ${pageNumber} of ${totalPages}</div>
+      </section>
+    `;
+}
+
+function renderTemplateHtml(template, row) {
+    const normalized = normalizeTemplate(template);
+    const pageWidth = cssNumber(normalized.page.width, 794, 1, 5000);
+    const pageHeight = cssNumber(normalized.page.height, 1123, 1, 10000);
+    const orientation =
+        normalized.page.orientation === "landscape"
+            ? "landscape"
+            : "portrait";
+
+    const pages = paginatePagesForTables(
+        normalized.pages,
+        row || {},
+        pageHeight
+    );
+
+    const pagesHtml = pages
+        .map((page, index) =>
+            renderPage(page, row || {}, index + 1, pages.length)
+        )
+        .join("\n");
 
     return `
       <!DOCTYPE html>
@@ -298,50 +314,65 @@ function renderTemplateHtml(template, row) {
           <meta charset="utf-8" />
           <style>
             @page {
-              size: A4 ${template.page?.orientation === "landscape"
-            ? "landscape"
-            : "portrait"};
+              size: A4 ${orientation};
               margin: 0;
             }
-  
+
             * {
               box-sizing: border-box;
             }
-  
+
             html, body {
               margin: 0;
               padding: 0;
               font-family: Arial, sans-serif;
             }
-  
+
             .report-page {
               position: relative;
               width: ${pageWidth}px;
               height: ${pageHeight}px;
-              overflow: visible;
+              overflow: hidden;
               background: white;
+              page-break-after: always;
+              break-after: page;
             }
-  
+
+            .report-page:last-child {
+              page-break-after: auto;
+              break-after: auto;
+            }
+
+            .page-number {
+              position: absolute;
+              right: 40px;
+              bottom: 24px;
+              font-size: 11px;
+              color: #4b5563;
+              font-family: Arial, sans-serif;
+            }
+
             .report-table {
               border-collapse: collapse;
               table-layout: fixed;
               font-family: Arial, sans-serif;
               font-size: 12px;
             }
-  
+
             .report-table th,
             .report-table td {
               border: 1px solid #333;
               padding: 5px;
               text-align: left;
               overflow-wrap: anywhere;
+              vertical-align: middle;
             }
-  
+
             .report-table th {
               background: #f0f0f0;
               font-weight: bold;
             }
-  
+
             .report-table tr {
               break-inside: avoid;
               page-break-inside: avoid;
@@ -349,12 +380,14 @@ function renderTemplateHtml(template, row) {
           </style>
         </head>
         <body>
-          <main class="report-page">
-            ${content}
-          </main>
+          ${pagesHtml}
         </body>
       </html>
     `;
 }
 
-module.exports = { renderTemplateHtml };
+module.exports = {
+    renderTemplateHtml,
+    normalizeTemplate,
+    paginatePagesForTables,
+};

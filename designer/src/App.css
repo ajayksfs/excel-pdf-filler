@@ -2,11 +2,18 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: Arial, sans-serif;
   background: #f3f4f6;
   color: #111827;
+  overflow: hidden;
 }
 
 button,
@@ -21,34 +28,52 @@ button {
 }
 
 .app {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 .topbar {
-  min-height: 76px;
+  flex-shrink: 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 14px 22px;
+  gap: 12px;
+  padding: 8px 12px;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
+  z-index: 3;
+}
+
+.topbar strong {
+  font-size: 14px;
 }
 
 .subtitle {
-  margin-top: 5px;
-  font-size: 12px;
+  margin-top: 2px;
+  font-size: 11px;
   color: #6b7280;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+}
+
+.topbar-actions button {
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .template-name {
-  width: 230px;
+  width: 180px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 input,
@@ -56,23 +81,25 @@ select,
 textarea {
   width: 100%;
   min-width: 0;
-  padding: 8px;
+  padding: 5px 7px;
   border: 1px solid #d1d5db;
-  border-radius: 5px;
+  border-radius: 4px;
   background: #ffffff;
+  font-size: 12px;
 }
 
 textarea {
-  min-height: 75px;
+  min-height: 52px;
   resize: vertical;
 }
 
 button {
-  padding: 9px 12px;
+  padding: 6px 8px;
   border: 1px solid #d1d5db;
-  border-radius: 5px;
+  border-radius: 4px;
   background: #ffffff;
   text-align: left;
+  font-size: 12px;
 }
 
 button:hover {
@@ -91,14 +118,20 @@ button:hover {
 }
 
 .workspace {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 190px minmax(400px, 1fr) 270px;
-  min-height: calc(100vh - 76px);
+  grid-template-columns: 150px minmax(360px, 1fr) 220px;
+  overflow: hidden;
 }
 
 .sidebar,
 .properties {
-  padding: 18px 14px;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 8px;
   background: #ffffff;
 }
 
@@ -112,47 +145,192 @@ button:hover {
 
 .sidebar h3,
 .properties h3 {
-  margin-top: 0;
-  font-size: 15px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #4b5563;
 }
 
 .sidebar button {
   width: 100%;
-  margin-bottom: 9px;
+  margin-bottom: 4px;
+  padding: 5px 7px;
+  font-size: 11px;
+}
+
+.page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 8px;
+}
+
+.page-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 0;
+  padding: 5px 7px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.page-tab.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.page-tab-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.page-tab.active .page-tab-count {
+  background: #bfdbfe;
+  color: #1e40af;
+}
+
+.sidebar .danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.runtime-pages-note {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.runtime-page-list {
+  margin-top: 4px;
+}
+
+.page-tab.runtime-tab {
+  cursor: default;
+  background: #f8fafc;
+}
+
+.page-tab.runtime-tab.auto {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.page-tab.runtime-tab.auto .page-tab-count {
+  background: #fde68a;
+  color: #92400e;
+}
+
+.runtime-page-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding-bottom: 40px;
+}
+
+.runtime-page-card {
+  width: max-content;
+}
+
+.runtime-page-card.auto .page {
+  outline: 2px solid #f59e0b;
+}
+
+.runtime-page-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.runtime-page-label span {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.preview-page {
+  position: relative;
+  margin: 0 auto;
+  background: #ffffff;
+  box-shadow: 0 2px 14px rgb(0 0 0 / 12%);
+  overflow: hidden;
+}
+
+.preview-element {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.preview-page-number {
+  position: absolute;
+  right: 40px;
+  bottom: 24px;
+  color: #4b5563;
+  font-size: 11px;
+  font-family: Arial, sans-serif;
 }
 
 .sidebar p {
-  font-size: 13px;
+  margin: 0 0 4px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .sidebar hr,
 .properties hr {
-  margin: 18px 0;
+  margin: 8px 0;
   border: 0;
   border-top: 1px solid #e5e7eb;
 }
 
 .hint {
   color: #6b7280;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .canvas-area {
   min-width: 0;
-  padding: 20px;
-  overflow: auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  overflow: hidden;
 }
 
 .canvas-caption {
-  margin-bottom: 12px;
+  flex-shrink: 0;
+  margin-bottom: 6px;
   color: #6b7280;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .canvas-viewport {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 6px;
 }
 
 .page {
@@ -202,8 +380,8 @@ button:hover {
 
 .properties label {
   display: block;
-  margin-bottom: 12px;
-  font-size: 12px;
+  margin-bottom: 7px;
+  font-size: 11px;
   color: #374151;
 }
 
@@ -211,26 +389,26 @@ button:hover {
 .properties label > select,
 .properties label > textarea {
   display: block;
-  margin-top: 5px;
-  font-size: 13px;
+  margin-top: 3px;
+  font-size: 12px;
   color: #111827;
 }
 
 .properties h4 {
-  margin-bottom: 12px;
-  font-size: 13px;
+  margin: 0 0 6px;
+  font-size: 11px;
 }
 
 .number-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 6px;
 }
 
 .checkbox-label {
   display: flex !important;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .checkbox-label input {
@@ -240,24 +418,29 @@ button:hover {
 
 .danger-button {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 4px;
+  padding: 5px 7px;
   color: #b91c1c;
   border-color: #fecaca;
 }
 
 .status {
-  font-size: 12px;
-  line-height: 1.5;
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 @media (max-width: 1000px) {
   .workspace {
-    grid-template-columns: 150px minmax(400px, 1fr);
+    grid-template-columns: 130px minmax(320px, 1fr);
+    grid-template-rows: 1fr auto;
   }
 
   .properties {
     grid-column: 1 / -1;
+    height: auto;
+    max-height: 36vh;
     border-top: 1px solid #e5e7eb;
     border-left: 0;
   }
@@ -267,6 +450,7 @@ button:hover {
   .topbar {
     align-items: stretch;
     flex-direction: column;
+    gap: 6px;
   }
 
   .topbar-actions {
@@ -279,43 +463,48 @@ button:hover {
   }
 
   .workspace {
-    grid-template-columns: 110px minmax(300px, 1fr);
+    grid-template-columns: 108px minmax(260px, 1fr);
   }
 
   .canvas-area {
-    padding: 8px;
+    padding: 6px;
   }
 }
+
 /* excel toolbar */
 
 .excel-toolbar {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 8px;
+  padding: 6px 12px;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
+  z-index: 2;
 }
 
 .excel-toolbar > label {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  min-width: 150px;
-  font-size: 12px;
+  gap: 3px;
+  min-width: 120px;
+  font-size: 11px;
   color: #374151;
 }
 
 .excel-toolbar > button {
   align-self: end;
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .excel-toolbar .preview-toggle {
   flex-direction: row;
   align-items: center;
   min-width: auto;
-  padding-bottom: 9px;
+  padding-bottom: 5px;
 }
 
 .excel-toolbar .preview-toggle input {
@@ -325,6 +514,12 @@ button:hover {
 .data-status {
   max-width: 100%;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 11px;
   color: #4b5563;
+}
+
+.topbar .status {
+  margin: 0;
+  max-width: 180px;
+  font-size: 11px;
 }

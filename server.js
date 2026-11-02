@@ -9,6 +9,10 @@ const fs = require("fs");
 const puppeteer = require("puppeteer");
 const archiver = require("archiver");
 const { renderTemplateHtml } = require("./pdfRenderer");
+const {
+    normalizeTemplate,
+    serializeTemplate,
+} = require("./templateUtils");
 
 
 
@@ -368,27 +372,31 @@ app.get("/api/sessions/:id/normalized-preview", (req, res) => {
 // Save or update a template JSON file
 app.post("/api/templates", (req, res) => {
     try {
-        const { id, name, page, elements } = req.body;
+        const { id, name, page, elements, pages } = req.body;
+
+        const hasPages = Array.isArray(pages) && pages.length > 0;
+        const hasElements = Array.isArray(elements);
 
         if (
             typeof id !== "string" ||
             !/^[a-zA-Z0-9_-]+$/.test(id) ||
             typeof name !== "string" ||
             !page ||
-            !Array.isArray(elements)
+            (!hasPages && !hasElements)
         ) {
             return res.status(400).json({
                 message: "Invalid template data",
             });
         }
 
-        const template = {
+        const template = serializeTemplate({
             id,
             name,
             page,
-            elements,
+            pages: hasPages ? pages : undefined,
+            elements: hasElements ? elements : undefined,
             updatedAt: new Date().toISOString(),
-        };
+        });
 
         const filePath = path.join(templatesDir, `${id}.json`);
 
@@ -430,7 +438,9 @@ app.get("/api/templates/:id", (req, res) => {
     }
 
     return res.json(
-        JSON.parse(fs.readFileSync(filePath, "utf8"))
+        normalizeTemplate(
+            JSON.parse(fs.readFileSync(filePath, "utf8"))
+        )
     );
 });
 
@@ -453,12 +463,16 @@ function loadTemplate(templateId) {
         throw error;
     }
 
-    const template = JSON.parse(
-        fs.readFileSync(filePath, "utf8")
+    const template = normalizeTemplate(
+        JSON.parse(fs.readFileSync(filePath, "utf8"))
     );
 
-    if (!Array.isArray(template.elements)) {
-        const error = new Error("Template elements are invalid");
+    if (
+        !Array.isArray(template.pages) ||
+        template.pages.length === 0 ||
+        !template.pages.every((page) => Array.isArray(page.elements))
+    ) {
+        const error = new Error("Template pages are invalid");
         error.status = 400;
         throw error;
     }

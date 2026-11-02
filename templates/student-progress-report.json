@@ -8,6 +8,117 @@
     "orientation": "portrait",
     "unit": "px"
   },
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "elements": [
+        {
+          "id": "heading-1",
+          "type": "text",
+          "x": 70,
+          "y": 45,
+          "width": 650,
+          "height": 45,
+          "content": "STUDENT PROGRESS REPORT",
+          "fontSize": 25,
+          "fontFamily": "Arial",
+          "color": "#172554",
+          "bold": true,
+          "align": "center"
+        },
+        {
+          "id": "name-1",
+          "type": "field",
+          "x": 60,
+          "y": 125,
+          "width": 320,
+          "height": 30,
+          "field": "studentName",
+          "content": "Student Name",
+          "fontSize": 16,
+          "fontFamily": "Arial",
+          "color": "#111827",
+          "bold": true,
+          "align": "left"
+        },
+        {
+          "id": "admission-1",
+          "type": "field",
+          "x": 60,
+          "y": 160,
+          "width": 320,
+          "height": 28,
+          "field": "admissionNo",
+          "content": "Admission No",
+          "fontSize": 14,
+          "fontFamily": "Arial",
+          "color": "#111827",
+          "bold": false,
+          "align": "left"
+        },
+        {
+          "id": "class-1",
+          "type": "field",
+          "x": 60,
+          "y": 195,
+          "width": 320,
+          "height": 28,
+          "field": "className",
+          "content": "Class",
+          "fontSize": 14,
+          "fontFamily": "Arial",
+          "color": "#111827",
+          "bold": false,
+          "align": "left"
+        },
+        {
+          "id": "photo-1",
+          "type": "image",
+          "x": 620,
+          "y": 110,
+          "width": 100,
+          "height": 100,
+          "src": "https://qa.schoolforschools.ai/assets/user-placeholder--3o1MXL2.jpg",
+          "field": "",
+          "alt": "Student photo",
+          "objectFit": "contain"
+        },
+        {
+          "id": "subject-table",
+          "type": "table",
+          "x": 30,
+          "y": 250,
+          "width": 735,
+          "height": 240,
+          "rowHeight": 60,
+          "field": "subjects",
+          "columns": [
+            {
+              "header": "Subject",
+              "field": "subjectName",
+              "width": 334
+            },
+            {
+              "header": "Maximum Marks",
+              "field": "maxMarks",
+              "width": 200
+            },
+            {
+              "header": "Marks Obtained",
+              "field": "marksObtained",
+              "width": 200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "page-2-mvuud2n4-xdmy",
+      "name": "Page 2",
+      "elements": []
+    }
+  ],
   "elements": [
     {
       "id": "heading-1",
@@ -87,7 +198,7 @@
       "y": 250,
       "width": 735,
       "height": 240,
-      "rowHeight": 30,
+      "rowHeight": 60,
       "field": "subjects",
       "columns": [
         {
@@ -108,5 +219,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-10-30T08:57:58.548Z"
+  "updatedAt": "2026-10-30T10:55:10.760Z"
 }

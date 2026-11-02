@@ -1,6 +1,10 @@
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Rnd } from "react-rnd";
+import {
+	getTableRows,
+	paginatePagesForTables,
+} from "./tablePagination";
 import "./App.css";
 
 
@@ -13,6 +17,47 @@ const PAGE = {
 };
 
 const TEMPLATE_ID = "student-progress-report";
+
+function createPage(overrides = {}, index = 0) {
+	const pageNumber = index + 1;
+
+	return {
+		id:
+			overrides.id ||
+			`page-${pageNumber}-${Date.now().toString(36)}-${Math.random()
+				.toString(36)
+				.slice(2, 6)}`,
+		name: overrides.name || `Page ${pageNumber}`,
+		elements: Array.isArray(overrides.elements)
+			? overrides.elements
+			: [],
+	};
+}
+
+/**
+ * Normalize legacy single-page templates and multi-page templates
+ * into a consistent `{ pages: [...] }` shape.
+ */
+function normalizeTemplatePages(template = {}) {
+	if (Array.isArray(template.pages) && template.pages.length > 0) {
+		return template.pages.map((page, index) =>
+			createPage(page || {}, index)
+		);
+	}
+
+	return [
+		createPage(
+			{
+				id: "page-1",
+				name: "Page 1",
+				elements: Array.isArray(template.elements)
+					? template.elements
+					: [],
+			},
+			0
+		),
+	];
+}
 
 const initialElements = [
 	{
@@ -190,7 +235,10 @@ function makeElement(type) {
 
 function App() {
 	const [name, setName] = useState("Student Progress Report");
-	const [elements, setElements] = useState(initialElements);
+	const [pages, setPages] = useState([
+		createPage({ id: "page-1", name: "Page 1", elements: initialElements }, 0),
+	]);
+	const [activePageId, setActivePageId] = useState("page-1");
 	const [selectedId, setSelectedId] = useState("heading-1");
 	const [status, setStatus] = useState("");
 	const [sessionId, setSessionId] = useState("");
@@ -200,6 +248,36 @@ function App() {
 	const [previewMode, setPreviewMode] = useState(false);
 	const [dataStatus, setDataStatus] = useState("");
 	const [saveStatus, setSaveStatus] = useState("");
+
+	const activePage =
+		pages.find((page) => page.id === activePageId) || pages[0];
+	const elements = activePage?.elements || [];
+	const activePageIndex = Math.max(
+		0,
+		pages.findIndex((page) => page.id === activePage?.id)
+	);
+
+	useEffect(() => {
+		async function loadSavedTemplate() {
+			try {
+				const response = await fetch(`/api/templates/${TEMPLATE_ID}`);
+
+				if (!response.ok) return;
+
+				const template = await response.json();
+				const nextPages = normalizeTemplatePages(template);
+
+				setName(template.name || "Student Progress Report");
+				setPages(nextPages);
+				setActivePageId(nextPages[0]?.id || "page-1");
+				setSelectedId(nextPages[0]?.elements?.[0]?.id || null);
+			} catch {
+				// Keep local defaults when the template is missing.
+			}
+		}
+
+		loadSavedTemplate();
+	}, []);
 
 	async function loadExcelData() {
 		if (!sessionId.trim()) {
@@ -263,6 +341,19 @@ function App() {
 
 	const currentPreviewRow = excelRows[selectedRowIndex] ?? null;
 
+	const runtimePreviewPages = useMemo(() => {
+		if (!previewMode || !currentPreviewRow) return null;
+
+		return paginatePagesForTables(pages, currentPreviewRow, PAGE.height);
+	}, [previewMode, currentPreviewRow, pages]);
+
+	const designedPageCount = pages.filter(
+		(page) => (page.elements || []).length > 0
+	).length;
+	const showRuntimePagination =
+		Boolean(runtimePreviewPages) &&
+		runtimePreviewPages.length > Math.max(1, designedPageCount);
+
 	function getFieldValue(field) {
 		if (!currentPreviewRow || !field) return "";
 
@@ -280,8 +371,28 @@ function App() {
 		(element) => element.id === selectedId
 	);
 
+	function updateActivePageElements(updater) {
+		setPages((currentPages) =>
+			currentPages.map((page) => {
+				if (page.id !== (activePage?.id || activePageId)) {
+					return page;
+				}
+
+				const nextElements =
+					typeof updater === "function"
+						? updater(page.elements || [])
+						: updater;
+
+				return {
+					...page,
+					elements: nextElements,
+				};
+			})
+		);
+	}
+
 	function updateElement(id, changes) {
-		setElements((current) =>
+		updateActivePageElements((current) =>
 			current.map((element) =>
 				element.id === id
 					? { ...element, ...changes }
@@ -293,7 +404,7 @@ function App() {
 	function addElement(type) {
 		const element = makeElement(type);
 
-		setElements((current) => [...current, element]);
+		updateActivePageElements((current) => [...current, element]);
 		setSelectedId(element.id);
 		setStatus("");
 	}
@@ -301,21 +412,70 @@ function App() {
 	function removeSelected() {
 		if (!selectedId) return;
 
-		setElements((current) =>
+		updateActivePageElements((current) =>
 			current.filter((element) => element.id !== selectedId)
 		);
 
 		setSelectedId(null);
 	}
 
+	function selectPage(pageId) {
+		if (!pageId || pageId === activePageId) return;
+
+		setActivePageId(pageId);
+		setSelectedId(null);
+		setStatus("");
+	}
+
+	function addPage() {
+		const nextIndex = pages.length;
+		const newPage = createPage(
+			{
+				name: `Page ${nextIndex + 1}`,
+				elements: [],
+			},
+			nextIndex
+		);
+
+		setPages((current) => [...current, newPage]);
+		setActivePageId(newPage.id);
+		setSelectedId(null);
+		setStatus(`Added ${newPage.name}.`);
+	}
+
+	function deleteActivePage() {
+		if (pages.length <= 1) {
+			setStatus("At least one page is required.");
+			return;
+		}
+
+		const remaining = pages.filter((page) => page.id !== activePage?.id);
+
+		const renumbered = remaining.map((page, index) => ({
+			...page,
+			name: page.name?.startsWith("Page ")
+				? `Page ${index + 1}`
+				: page.name,
+		}));
+
+		setPages(renumbered);
+		setActivePageId(renumbered[Math.max(0, activePageIndex - 1)]?.id);
+		setSelectedId(null);
+		setStatus("Page deleted.");
+	}
+
 	async function saveTemplate() {
 		setStatus("Saving...");
+
+		const normalizedPages = normalizeTemplatePages({ pages });
 
 		const template = {
 			id: TEMPLATE_ID,
 			name,
 			page: PAGE,
-			elements,
+			pages: normalizedPages,
+			// Legacy single-page alias for older readers.
+			elements: normalizedPages[0]?.elements || [],
 		};
 
 		try {
@@ -399,15 +559,12 @@ function App() {
 
 		if (element.type === "table") {
 			const columns = element.columns || [];
-			const tableRows =
-				previewMode && currentPreviewRow && element.field
-					? Array.isArray(currentPreviewRow[element.field])
-						? currentPreviewRow[element.field]
-						: []
-					: [];
+			const tableRows = previewMode
+				? getTableRows(element, currentPreviewRow || {})
+				: [];
 
 			return (
-				<div style={{ width: "100%", overflow: "hidden" }}>
+				<div style={{ width: "100%", overflow: "visible" }}>
 					<table
 						style={{
 							width: "100%",
@@ -426,6 +583,7 @@ function App() {
 											padding: 4,
 											background: "#f0f0f0",
 											width: column.width || undefined,
+											height: element.rowHeight || 30,
 										}}
 									>
 										{column.header}
@@ -739,91 +897,238 @@ function App() {
 
 					<hr />
 
-					<h3>Page</h3>
-					<p>A4 portrait</p>
-					<p>794 × 1123 px</p>
+					<h3>Pages</h3>
+					<p>A4 portrait · 794 × 1123 px</p>
+
+					<div className="page-list" role="tablist" aria-label="Template pages">
+						{pages.map((page, index) => (
+							<button
+								key={page.id}
+								type="button"
+								role="tab"
+								aria-selected={page.id === activePage?.id}
+								className={
+									page.id === activePage?.id
+										? "page-tab active"
+										: "page-tab"
+								}
+								onClick={() => selectPage(page.id)}
+							>
+								{page.name || `Page ${index + 1}`}
+								<span className="page-tab-count">
+									{(page.elements || []).length}
+								</span>
+							</button>
+						))}
+					</div>
+
+					<button type="button" onClick={addPage}>
+						+ Add Page
+					</button>
+
+					<button
+						type="button"
+						className="danger-button"
+						onClick={deleteActivePage}
+						disabled={pages.length <= 1}
+					>
+						Delete page
+					</button>
+
+					{showRuntimePagination && (
+						<div className="runtime-pages-note">
+							<p className="hint">
+								Preview adds {runtimePreviewPages.length - designedPageCount}{" "}
+								auto page
+								{runtimePreviewPages.length - designedPageCount === 1
+									? ""
+									: "s"}{" "}
+								because the table overflows A4.
+							</p>
+							<div className="page-list runtime-page-list">
+								{runtimePreviewPages.map((page, index) => (
+									<div
+										key={page.id}
+										className={
+											page._autoGenerated
+												? "page-tab runtime-tab auto"
+												: "page-tab runtime-tab"
+										}
+									>
+										{page._autoGenerated
+											? `Auto ${index + 1}`
+											: page.name || `Page ${index + 1}`}
+										<span className="page-tab-count">
+											{index + 1}/{runtimePreviewPages.length}
+										</span>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+
 					<p className="hint">
-						Drag elements to reposition them. Drag their corners
-						to resize.
+						Enable <strong>Preview real data</strong> to see
+						auto-added pages when a table exceeds one A4 sheet.
 					</p>
 				</aside>
 
 				<main className="canvas-area">
 					<div className="canvas-caption">
-						A4 canvas · {elements.length} elements
+						{previewMode && runtimePreviewPages ? (
+							<>
+								PDF preview · {runtimePreviewPages.length} page
+								{runtimePreviewPages.length === 1 ? "" : "s"}
+								{showRuntimePagination
+									? " · table overflow pagination active"
+									: ""}
+							</>
+						) : (
+							<>
+								A4 canvas · {activePage?.name || "Page 1"} ·{" "}
+								{elements.length} elements · {pages.length} page
+								{pages.length === 1 ? "" : "s"}
+							</>
+						)}
 					</div>
 
 					<div className="canvas-viewport">
-						<div
-							className="page"
-							style={{
-								width: PAGE.width,
-								height: PAGE.height,
-								margin: "0 auto",
-							}}
-							onClick={() => setSelectedId(null)}
-						>
-							{elements.map((element) => (
-								<Rnd
-									key={element.id}
-									bounds="parent"
-									position={{ x: element.x, y: element.y }}
-									size={{
-										width: element.width,
-										height: element.height,
-									}}
-									onDragStart={(event) => event.stopPropagation()}
-									onDragStop={(event, position) => {
-										updateElement(element.id, {
-											x: Math.round(position.x),
-											y: Math.round(position.y),
-										});
-									}}
-									onResizeStop={(
-										event,
-										direction,
-										ref,
-										delta,
-										position
-									) => {
-										updateElement(element.id, {
-											x: Math.round(position.x),
-											y: Math.round(position.y),
-											width: Math.round(
-												ref.offsetWidth
-											),
-											height: Math.round(
-												ref.offsetHeight
-											),
-										});
-									}}
-									onClick={(event) => {
-										event.stopPropagation();
-										setSelectedId(element.id);
-									}}
-									onMouseDown={(event) => {
-										event.stopPropagation();
-										setSelectedId(element.id);
-									}}
-									className={
-										selectedId === element.id
-											? "design-element selected"
-											: "design-element"
-									}
-									style={{
-										zIndex: selectedId === element.id ? 2 : 1,
-									}}
-									resizeHandleStyles={{
-										right: { right: -5 },
-										left: { left: -5 },
-										top: { top: -5 },
-										bottom: { bottom: -5 },
-									}}
-								>
-									{renderElement(element)}
-								</Rnd>
-							))}
-						</div>
+						{previewMode && runtimePreviewPages ? (
+							<div className="runtime-page-stack">
+								{runtimePreviewPages.map((page, pageIndex) => (
+									<div
+										key={page.id}
+										className={
+											page._autoGenerated
+												? "runtime-page-card auto"
+												: "runtime-page-card"
+										}
+									>
+										<div className="runtime-page-label">
+											{page._autoGenerated
+												? `${page.name || "Continued"} · auto-added`
+												: page.name || `Page ${pageIndex + 1}`}
+											<span>
+												Page {pageIndex + 1} of{" "}
+												{runtimePreviewPages.length}
+											</span>
+										</div>
+										<div
+											className="page preview-page"
+											style={{
+												width: PAGE.width,
+												height: PAGE.height,
+											}}
+										>
+											{(page.elements || []).map((element) => {
+												const tableRows =
+													element.type === "table"
+														? getTableRows(
+															element,
+															currentPreviewRow || {}
+														)
+														: null;
+												const tableHeight =
+													element.type === "table"
+														? (element.rowHeight || 30) *
+														(1 + (tableRows?.length || 0))
+														: element.height;
+
+												return (
+													<div
+														key={`${page.id}-${element.id}`}
+														className="preview-element"
+														style={{
+															left: element.x,
+															top: element.y,
+															width: element.width,
+															height:
+																element.type === "table"
+																	? tableHeight
+																	: element.height,
+														}}
+													>
+														{renderElement(element)}
+													</div>
+												);
+											})}
+											<div className="preview-page-number">
+												Page {pageIndex + 1} of{" "}
+												{runtimePreviewPages.length}
+											</div>
+										</div>
+									</div>
+								))}
+							</div>
+						) : (
+							<div
+								key={activePage?.id || "page"}
+								className="page"
+								style={{
+									width: PAGE.width,
+									height: PAGE.height,
+									margin: "0 auto",
+								}}
+								onClick={() => setSelectedId(null)}
+							>
+								{elements.map((element) => (
+									<Rnd
+										key={`${activePage?.id}-${element.id}`}
+										bounds="parent"
+										position={{ x: element.x, y: element.y }}
+										size={{
+											width: element.width,
+											height: element.height,
+										}}
+										onDragStart={(event) => event.stopPropagation()}
+										onDragStop={(event, position) => {
+											updateElement(element.id, {
+												x: Math.round(position.x),
+												y: Math.round(position.y),
+											});
+										}}
+										onResizeStop={(
+											event,
+											direction,
+											ref,
+											delta,
+											position
+										) => {
+											updateElement(element.id, {
+												x: Math.round(position.x),
+												y: Math.round(position.y),
+												width: Math.round(ref.offsetWidth),
+												height: Math.round(ref.offsetHeight),
+											});
+										}}
+										onClick={(event) => {
+											event.stopPropagation();
+											setSelectedId(element.id);
+										}}
+										onMouseDown={(event) => {
+											event.stopPropagation();
+											setSelectedId(element.id);
+										}}
+										className={
+											selectedId === element.id
+												? "design-element selected"
+												: "design-element"
+										}
+										style={{
+											zIndex: selectedId === element.id ? 2 : 1,
+										}}
+										resizeHandleStyles={{
+											right: { right: -5 },
+											left: { left: -5 },
+											top: { top: -5 },
+											bottom: { bottom: -5 },
+										}}
+									>
+										{renderElement(element)}
+									</Rnd>
+								))}
+							</div>
+						)}
 					</div>
 				</main>
 

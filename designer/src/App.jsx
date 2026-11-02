@@ -18,6 +18,87 @@ const PAGE = {
 
 const TEMPLATE_ID = "student-progress-report";
 
+const DEFAULT_HEADER = {
+	enabled: true,
+	left: "",
+	center: "Student Progress Report",
+	right: "",
+	height: 36,
+	fontSize: 11,
+	color: "#374151",
+	showOnFirstPage: true,
+};
+
+const DEFAULT_FOOTER = {
+	enabled: true,
+	left: "",
+	center: "",
+	right: "",
+	height: 36,
+	fontSize: 10,
+	color: "#6b7280",
+	showOnFirstPage: true,
+};
+
+const DEFAULT_PAGE_NUMBER = {
+	enabled: true,
+	format: "Page {{page}} of {{pages}}",
+	align: "right",
+	fontSize: 10,
+	color: "#4b5563",
+	showOnFirstPage: true,
+};
+
+function normalizeBand(band = {}, defaults) {
+	return {
+		enabled:
+			band.enabled === undefined
+				? Boolean(defaults.enabled)
+				: Boolean(band.enabled),
+		left: typeof band.left === "string" ? band.left : defaults.left,
+		center: typeof band.center === "string" ? band.center : defaults.center,
+		right: typeof band.right === "string" ? band.right : defaults.right,
+		height: Number(band.height) || defaults.height,
+		fontSize: Number(band.fontSize) || defaults.fontSize,
+		color: band.color || defaults.color,
+		showOnFirstPage:
+			band.showOnFirstPage === undefined
+				? defaults.showOnFirstPage
+				: Boolean(band.showOnFirstPage),
+	};
+}
+
+function normalizePageNumber(config = {}, defaults = DEFAULT_PAGE_NUMBER) {
+	return {
+		enabled:
+			config.enabled === undefined
+				? Boolean(defaults.enabled)
+				: Boolean(config.enabled),
+		format:
+			typeof config.format === "string" && config.format.trim()
+				? config.format
+				: defaults.format,
+		align: ["left", "center", "right"].includes(config.align)
+			? config.align
+			: defaults.align,
+		fontSize: Number(config.fontSize) || defaults.fontSize,
+		color: config.color || defaults.color,
+		showOnFirstPage:
+			config.showOnFirstPage === undefined
+				? defaults.showOnFirstPage
+				: Boolean(config.showOnFirstPage),
+	};
+}
+
+function resolvePreviewText(text, row, pageNumber, totalPages) {
+	return String(text ?? "").replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, key) => {
+		if (key === "page") return String(pageNumber);
+		if (key === "pages" || key === "totalPages") return String(totalPages);
+		const value = row?.[key];
+		return value == null ? "" : String(value);
+	});
+}
+
 function createPage(overrides = {}, index = 0) {
 	const pageNumber = index + 1;
 
@@ -248,6 +329,9 @@ function App() {
 	const [previewMode, setPreviewMode] = useState(false);
 	const [dataStatus, setDataStatus] = useState("");
 	const [saveStatus, setSaveStatus] = useState("");
+	const [header, setHeader] = useState(DEFAULT_HEADER);
+	const [footer, setFooter] = useState(DEFAULT_FOOTER);
+	const [pageNumber, setPageNumber] = useState(DEFAULT_PAGE_NUMBER);
 
 	const activePage =
 		pages.find((page) => page.id === activePageId) || pages[0];
@@ -271,6 +355,11 @@ function App() {
 				setPages(nextPages);
 				setActivePageId(nextPages[0]?.id || "page-1");
 				setSelectedId(nextPages[0]?.elements?.[0]?.id || null);
+				setHeader(normalizeBand(template.header || {}, DEFAULT_HEADER));
+				setFooter(normalizeBand(template.footer || {}, DEFAULT_FOOTER));
+				setPageNumber(
+					normalizePageNumber(template.pageNumber || {}, DEFAULT_PAGE_NUMBER)
+				);
 			} catch {
 				// Keep local defaults when the template is missing.
 			}
@@ -476,6 +565,9 @@ function App() {
 			pages: normalizedPages,
 			// Legacy single-page alias for older readers.
 			elements: normalizedPages[0]?.elements || [],
+			header,
+			footer,
+			pageNumber,
 		};
 
 		try {
@@ -971,6 +1063,150 @@ function App() {
 						Enable <strong>Preview real data</strong> to see
 						auto-added pages when a table exceeds one A4 sheet.
 					</p>
+
+					<hr />
+
+					<h3>Header / Footer</h3>
+
+					<label className="checkbox-label">
+						<input
+							type="checkbox"
+							checked={header.enabled}
+							onChange={(event) =>
+								setHeader((current) => ({
+									...current,
+									enabled: event.target.checked,
+								}))
+							}
+						/>
+						Header
+					</label>
+
+					{header.enabled && (
+						<>
+							<label>
+								Header center
+								<input
+									value={header.center}
+									onChange={(event) =>
+										setHeader((current) => ({
+											...current,
+											center: event.target.value,
+										}))
+									}
+									placeholder="Report title"
+								/>
+							</label>
+							<label>
+								Header left
+								<input
+									value={header.left}
+									onChange={(event) =>
+										setHeader((current) => ({
+											...current,
+											left: event.target.value,
+										}))
+									}
+									placeholder="{{studentName}}"
+								/>
+							</label>
+							<label>
+								Header right
+								<input
+									value={header.right}
+									onChange={(event) =>
+										setHeader((current) => ({
+											...current,
+											right: event.target.value,
+										}))
+									}
+								/>
+							</label>
+						</>
+					)}
+
+					<label className="checkbox-label">
+						<input
+							type="checkbox"
+							checked={footer.enabled}
+							onChange={(event) =>
+								setFooter((current) => ({
+									...current,
+									enabled: event.target.checked,
+								}))
+							}
+						/>
+						Footer
+					</label>
+
+					{footer.enabled && (
+						<label>
+							Footer center
+							<input
+								value={footer.center}
+								onChange={(event) =>
+									setFooter((current) => ({
+										...current,
+										center: event.target.value,
+									}))
+								}
+								placeholder="Confidential"
+							/>
+						</label>
+					)}
+
+					<label className="checkbox-label">
+						<input
+							type="checkbox"
+							checked={pageNumber.enabled}
+							onChange={(event) =>
+								setPageNumber((current) => ({
+									...current,
+									enabled: event.target.checked,
+								}))
+							}
+						/>
+						Page numbers
+					</label>
+
+					{pageNumber.enabled && (
+						<>
+							<label>
+								Format
+								<input
+									value={pageNumber.format}
+									onChange={(event) =>
+										setPageNumber((current) => ({
+											...current,
+											format: event.target.value,
+										}))
+									}
+									placeholder="Page {{page}} of {{pages}}"
+								/>
+							</label>
+							<label>
+								Align
+								<select
+									value={pageNumber.align}
+									onChange={(event) =>
+										setPageNumber((current) => ({
+											...current,
+											align: event.target.value,
+										}))
+									}
+								>
+									<option value="left">Left</option>
+									<option value="center">Center</option>
+									<option value="right">Right</option>
+								</select>
+							</label>
+						</>
+					)}
+
+					<p className="hint">
+						Tokens: {"{{page}}"}, {"{{pages}}"}, {"{{studentName}}"},
+						{"{{admissionNo}}"}, {"{{className}}"}
+					</p>
 				</aside>
 
 				<main className="canvas-area">
@@ -1020,6 +1256,43 @@ function App() {
 												height: PAGE.height,
 											}}
 										>
+											{header.enabled &&
+												!(pageIndex === 0 && !header.showOnFirstPage) && (
+													<div
+														className="preview-band preview-header"
+														style={{
+															height: header.height,
+															fontSize: header.fontSize,
+															color: header.color,
+														}}
+													>
+														<span>
+															{resolvePreviewText(
+																header.left,
+																currentPreviewRow,
+																pageIndex + 1,
+																runtimePreviewPages.length
+															)}
+														</span>
+														<span>
+															{resolvePreviewText(
+																header.center,
+																currentPreviewRow,
+																pageIndex + 1,
+																runtimePreviewPages.length
+															)}
+														</span>
+														<span>
+															{resolvePreviewText(
+																header.right,
+																currentPreviewRow,
+																pageIndex + 1,
+																runtimePreviewPages.length
+															)}
+														</span>
+													</div>
+												)}
+
 											{(page.elements || []).map((element) => {
 												const tableRows =
 													element.type === "table"
@@ -1052,10 +1325,77 @@ function App() {
 													</div>
 												);
 											})}
-											<div className="preview-page-number">
-												Page {pageIndex + 1} of{" "}
-												{runtimePreviewPages.length}
-											</div>
+
+											{footer.enabled &&
+												!(pageIndex === 0 && !footer.showOnFirstPage) && (
+													<div
+														className="preview-band preview-footer"
+														style={{
+															height: footer.height,
+															fontSize: footer.fontSize,
+															color: footer.color,
+														}}
+													>
+														<span>
+															{resolvePreviewText(
+																footer.left,
+																currentPreviewRow,
+																pageIndex + 1,
+																runtimePreviewPages.length
+															)}
+														</span>
+														<span>
+															{resolvePreviewText(
+																footer.center,
+																currentPreviewRow,
+																pageIndex + 1,
+																runtimePreviewPages.length
+															)}
+														</span>
+														<span>
+															{resolvePreviewText(
+																footer.right,
+																currentPreviewRow,
+																pageIndex + 1,
+																runtimePreviewPages.length
+															)}
+														</span>
+													</div>
+												)}
+
+											{pageNumber.enabled &&
+												!(pageIndex === 0 && !pageNumber.showOnFirstPage) && (
+													<div
+														className="preview-page-number"
+														style={{
+															justifyContent:
+																pageNumber.align === "left"
+																	? "flex-start"
+																	: pageNumber.align === "center"
+																		? "center"
+																		: "flex-end",
+															fontSize: pageNumber.fontSize,
+															color: pageNumber.color,
+															bottom: Math.max(
+																10,
+																Math.round(
+																	((footer.enabled
+																		? footer.height
+																		: 36) /
+																		2) -
+																	6
+																)
+															),
+														}}
+													>
+														{resolvePreviewText(
+															pageNumber.format,
+															currentPreviewRow,
+															pageIndex + 1,
+															runtimePreviewPages.length
+														)}
+													</div>
+												)}
 										</div>
 									</div>
 								))}

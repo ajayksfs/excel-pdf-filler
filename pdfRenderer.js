@@ -272,16 +272,145 @@ function renderElement(element, row) {
     `;
 }
 
-function renderPage(page, row, pageNumber, totalPages) {
+function resolveTemplateText(text, row, pageNumber, totalPages) {
+    return String(text ?? "").replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, key) => {
+        if (key === "page") return String(pageNumber);
+        if (key === "pages" || key === "totalPages") return String(totalPages);
+
+        const value = row?.[key];
+        return value == null ? "" : String(value);
+    });
+}
+
+function shouldShowBand(band, pageNumber) {
+    if (!band?.enabled) return false;
+    if (pageNumber === 1 && band.showOnFirstPage === false) return false;
+    return true;
+}
+
+function renderBand(band, position, row, pageNumber, totalPages, pageWidth) {
+    if (!shouldShowBand(band, pageNumber)) return "";
+
+    const height = cssNumber(band.height, 36, 20, 120);
+    const fontSize = cssNumber(band.fontSize, 10, 8, 24);
+    const top = position === "header" ? 0 : "auto";
+    const bottom = position === "footer" ? 0 : "auto";
+
+    const left = escapeHtml(
+        resolveTemplateText(band.left, row, pageNumber, totalPages)
+    );
+    const center = escapeHtml(
+        resolveTemplateText(band.center, row, pageNumber, totalPages)
+    );
+    const right = escapeHtml(
+        resolveTemplateText(band.right, row, pageNumber, totalPages)
+    );
+
+    return `
+      <div class="report-${position}" style="
+        position:absolute;
+        left:0;
+        top:${top};
+        bottom:${bottom};
+        width:${pageWidth}px;
+        height:${height}px;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        padding:0 28px;
+        box-sizing:border-box;
+        font-family:Arial, sans-serif;
+        font-size:${fontSize}px;
+        color:${cssColor(band.color, "#4b5563")};
+        border-${position === "header" ? "bottom" : "top"}:1px solid #e5e7eb;
+        background:#ffffff;
+      ">
+        <div style="flex:1; text-align:left; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${left}</div>
+        <div style="flex:1; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${center}</div>
+        <div style="flex:1; text-align:right; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${right}</div>
+      </div>
+    `;
+}
+
+function renderPageNumber(config, row, pageNumber, totalPages, pageWidth, footerHeight) {
+    if (!shouldShowBand(config, pageNumber)) return "";
+
+    const align = config.align || "right";
+    const justify =
+        align === "left"
+            ? "flex-start"
+            : align === "center"
+                ? "center"
+                : "flex-end";
+
+    const text = escapeHtml(
+        resolveTemplateText(config.format, row, pageNumber, totalPages)
+    );
+
+    // Sit inside the footer band when a footer is present; otherwise near bottom.
+    const bottom = Math.max(10, Math.round((footerHeight || 36) / 2 - 6));
+
+    return `
+      <div class="page-number" style="
+        position:absolute;
+        left:28px;
+        right:28px;
+        bottom:${bottom}px;
+        display:flex;
+        justify-content:${justify};
+        font-family:Arial, sans-serif;
+        font-size:${cssNumber(config.fontSize, 10, 8, 24)}px;
+        color:${cssColor(config.color, "#4b5563")};
+      ">${text}</div>
+    `;
+}
+
+function renderPage(
+    page,
+    row,
+    pageNumber,
+    totalPages,
+    options = {}
+) {
     const elements = Array.isArray(page?.elements) ? page.elements : [];
     const content = elements
         .map((element) => renderElement(element, row))
         .join("");
 
+    const headerHtml = renderBand(
+        options.header,
+        "header",
+        row,
+        pageNumber,
+        totalPages,
+        options.pageWidth
+    );
+    const footerHtml = renderBand(
+        options.footer,
+        "footer",
+        row,
+        pageNumber,
+        totalPages,
+        options.pageWidth
+    );
+    const pageNumberHtml = renderPageNumber(
+        options.pageNumber,
+        row,
+        pageNumber,
+        totalPages,
+        options.pageWidth,
+        shouldShowBand(options.footer, pageNumber)
+            ? options.footer.height
+            : 36
+    );
+
     return `
       <section class="report-page" data-page-id="${escapeHtml(page?.id || "")}">
+        ${headerHtml}
         ${content}
-        <div class="page-number">Page ${pageNumber} of ${totalPages}</div>
+        ${footerHtml}
+        ${pageNumberHtml}
       </section>
     `;
 }
@@ -294,16 +423,25 @@ function renderTemplateHtml(template, row) {
         normalized.page.orientation === "landscape"
             ? "landscape"
             : "portrait";
+    const dataRow = row || {};
 
     const pages = paginatePagesForTables(
         normalized.pages,
-        row || {},
+        dataRow,
         pageHeight
     );
 
+    const totalPages = pages.length;
+    const options = {
+        pageWidth,
+        header: normalized.header,
+        footer: normalized.footer,
+        pageNumber: normalized.pageNumber,
+    };
+
     const pagesHtml = pages
         .map((page, index) =>
-            renderPage(page, row || {}, index + 1, pages.length)
+            renderPage(page, dataRow, index + 1, totalPages, options)
         )
         .join("\n");
 
@@ -341,15 +479,6 @@ function renderTemplateHtml(template, row) {
             .report-page:last-child {
               page-break-after: auto;
               break-after: auto;
-            }
-
-            .page-number {
-              position: absolute;
-              right: 40px;
-              bottom: 24px;
-              font-size: 11px;
-              color: #4b5563;
-              font-family: Arial, sans-serif;
             }
 
             .report-table {

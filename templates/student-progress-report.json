@@ -219,5 +219,33 @@
       ]
     }
   ],
-  "updatedAt": "2026-10-30T10:55:10.760Z"
+  "header": {
+    "enabled": true,
+    "left": "{{admissionNo}}",
+    "center": "Student Progress Report",
+    "right": "{{className}}",
+    "height": 36,
+    "fontSize": 11,
+    "color": "#374151",
+    "showOnFirstPage": true
+  },
+  "footer": {
+    "enabled": true,
+    "left": "",
+    "center": "Confidential",
+    "right": "",
+    "height": 36,
+    "fontSize": 10,
+    "color": "#6b7280",
+    "showOnFirstPage": true
+  },
+  "pageNumber": {
+    "enabled": true,
+    "format": "Page {{page}} of {{pages}}",
+    "align": "right",
+    "fontSize": 10,
+    "color": "#4b5563",
+    "showOnFirstPage": true
+  },
+  "updatedAt": "2026-11-02T09:58:11.538Z"
 }

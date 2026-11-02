@@ -281,10 +281,57 @@ button:hover {
   overflow: visible;
 }
 
+.preview-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 28px;
+  box-sizing: border-box;
+  background: #ffffff;
+  font-family: Arial, sans-serif;
+}
+
+.preview-band > span {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preview-band > span:nth-child(1) {
+  text-align: left;
+}
+
+.preview-band > span:nth-child(2) {
+  text-align: center;
+}
+
+.preview-band > span:nth-child(3) {
+  text-align: right;
+}
+
+.preview-header {
+  top: 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.preview-footer {
+  bottom: 0;
+  border-top: 1px solid #e5e7eb;
+}
+
 .preview-page-number {
   position: absolute;
-  right: 40px;
+  left: 28px;
+  right: 28px;
   bottom: 24px;
+  z-index: 5;
+  display: flex;
   color: #4b5563;
   font-size: 11px;
   font-family: Arial, sans-serif;
